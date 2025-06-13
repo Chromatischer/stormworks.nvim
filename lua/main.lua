@@ -157,6 +157,50 @@ function M.register_libraries_with_lsp(libraries)
 
   current_settings.Lua.workspace.library = library_dirs
   current_settings.Lua.workspace.checkThirdParty = false
+
+  lua_client.rpc.request("workspace/didChangeConfiguration", {
+    settings = current_settings,
+  }, function(err, _)
+    if err then
+      print("✗ Failed to update LSP settings: " .. vim.inspect(err))
+    else
+      print("✓ Updated LSP settings with " .. #current_settings .. " extracted globals")
+    end
+  end)
+
+  -- Explicitly tell LSP about each library file by "opening" them
+  print("📖 Force-loading library files into LSP...")
+  local loaded_count = 0
+
+  for _, file_path in ipairs(library_files) do
+    -- Read the file content
+    local file = io.open(file_path, "r")
+    if file then
+      local content = file:read("*all")
+      file:close()
+
+      -- Tell LSP about this file
+      lua_client.rpc.notify("textDocument/didOpen", {
+        textDocument = {
+          uri = vim.uri_from_fname(file_path),
+          languageId = "lua",
+          version = 1,
+          text = content,
+        },
+      })
+
+      loaded_count = loaded_count + 1
+    end
+  end
+
+  --reset the linter
+  vim.diagnostic.reset()
+
+  -- Give it a moment then refresh
+  vim.defer_fn(function()
+    vim.lsp.buf.format({ async = false })
+    print("✅ LSP diagnostics refresh complete")
+  end, 1000)
 end
 
 -- Helper function to recursively find Lua files in a directory
