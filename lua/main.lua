@@ -3,8 +3,15 @@
 
 local M = {}
 
+local function get_plugin_directory()
+  -- Get the directory where THIS script (init.lua) is located
+  local script_path = debug.getinfo(1, "S").source:sub(2) -- Remove the '@' prefix
+  local script_dir = script_path:match("(.*/)") -- Extract directory
+  return script_dir
+end
+
 -- Hardcoded standard library path (relative to plugin directory)
-local STANDARD_LIB_PATH = "../common"
+local STANDARD_LIB_PATH = get_plugin_directory() .. "common/nameouschangey/MicroController/microcontroller.lua"
 
 -- Plugin configuration with sensible defaults
 M.config = {
@@ -70,10 +77,10 @@ function M.mark_as_micro_project()
     file:write("    removeRedundancies = true,\n")
     file:write("    removeComments = true,\n")
     file:write("    shortenStringDuplicates = true,\n")
-    file:write("    -- More aggressive optimizations (disabled by default)\n")
-    file:write("    shortenVariables = false,\n")
-    file:write("    shortenGlobals = false,\n")
-    file:write("    shortenNumbers = false\n")
+    file:write("    -- More aggressive optimizations (enabled by default)\n")
+    file:write("    shortenVariables = true,\n")
+    file:write("    shortenGlobals = true,\n")
+    file:write("    shortenNumbers = true\n")
     file:write("  }\n")
     file:write("}\n")
     file:close()
@@ -101,6 +108,92 @@ local function load_project_config()
   return {}
 end
 
+-- Function to add library files to Lua LSP workspace
+function M.register_libraries_with_lsp(libraries)
+  if not current_project then
+    print("No microcontroller project active")
+    return
+  end
+  print("Working on " .. #libraries .. " libraries")
+  -- Get all Lua files from project libraries
+  local library_files = {}
+
+  for _, lib_path in ipairs(libraries) do
+    local lua_files = M.find_lua_files_in_directory(lib_path)
+    print("In path: " .. lib_path .. " found: " .. #lua_files .. " files")
+    for _, file_path in ipairs(lua_files) do
+      table.insert(library_files, file_path)
+    end
+  end
+
+  if #library_files == 0 then
+    print("No library files found to register with LSP")
+    return
+  end
+
+  -- Get the Lua LSP client
+  local clients = vim.lsp.get_clients({ name = "lua_ls" })
+  if #clients == 0 then
+    print("⚠ Lua LSP (lua_ls) not found. Make sure it's running.")
+    return
+  end
+
+  local lua_client = clients[1]
+
+  -- Method 1: Update workspace library paths in LSP settings
+  local current_settings = lua_client.config.settings or {}
+  if not current_settings.Lua then
+    current_settings.Lua = {}
+  end
+  if not current_settings.Lua.workspace then
+    current_settings.Lua.workspace = {}
+  end
+
+  -- Add library directories (not individual files)
+  local library_dirs = {}
+  for _, lib_path in ipairs(project_libs) do
+    table.insert(library_dirs, lib_path)
+  end
+
+  current_settings.Lua.workspace.library = library_dirs
+  current_settings.Lua.workspace.checkThirdParty = false
+end
+
+-- Helper function to recursively find Lua files in a directory
+function M.find_lua_files_in_directory(directory)
+  local lua_files = {}
+
+  local function scan_directory(dir)
+    local handle = vim.loop.fs_scandir(dir)
+    if not handle then
+      return
+    end
+
+    while true do
+      local name, type = vim.loop.fs_scandir_next(handle)
+      if not name then
+        break
+      end
+
+      local full_path = dir .. "/" .. name
+
+      if type == "directory" then
+        -- Recursively scan subdirectories
+        scan_directory(full_path)
+      elseif type == "file" and name:match("%.lua$") then
+        table.insert(lua_files, full_path)
+      end
+    end
+  end
+
+  if file_exists(directory) then
+    return { directory }
+  end
+
+  scan_directory(directory)
+  return lua_files
+end
+
 -- Function to setup libraries for the current project
 function M.setup_project_libraries()
   local marker_path, marker_type = detect_micro_project()
@@ -121,7 +214,7 @@ function M.setup_project_libraries()
 
   -- Add standard library if it exists
   local std_lib = vim.fn.expand(STANDARD_LIB_PATH)
-  if dir_exists(std_lib) then
+  if file_exists(std_lib) then
     table.insert(project_libs, std_lib)
     print("✓ Added standard microcontroller library: " .. std_lib)
   else
@@ -131,7 +224,7 @@ function M.setup_project_libraries()
   -- Add user-defined libraries
   for _, lib_path in ipairs(M.config.user_lib_paths) do
     local expanded_path = vim.fn.expand(lib_path)
-    if dir_exists(expanded_path) then
+    if file_exists(expanded_path) then
       table.insert(project_libs, expanded_path)
       print("✓ Added user library: " .. expanded_path)
     end
@@ -149,6 +242,7 @@ function M.setup_project_libraries()
   end
 
   print("Microcontroller project setup complete. Libraries: " .. #project_libs)
+  M.register_libraries_with_lsp(project_libs)
 end
 
 -- Build function for microcontroller projects using LifeBoat API
