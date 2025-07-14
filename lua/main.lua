@@ -296,7 +296,9 @@ function M.build_micro_project()
     return
   end
 
-  print("🔧 Generating LifeBoat build script...")
+  print("🚀 Building microcontroller project...")
+
+  require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Build.Builder")
 
   -- Determine if this is a microcontroller project
   local is_microcontroller = current_project.config.is_microcontroller ~= false -- default to true
@@ -304,126 +306,30 @@ function M.build_micro_project()
   -- Get build parameters
   local build_params = M.get_build_params(current_project.config)
 
-  -- Generate the dynamic build script
-  local build_script = M.generate_build_script(current_project.path, is_microcontroller, build_params)
-
-  -- Write build script to temporary file
-  local temp_script_path = current_project.path .. "/_build_temp.lua"
-  local temp_file = io.open(temp_script_path, "w")
-  if not temp_file then
-    print("✗ Failed to create temporary build script")
-    return
+  local lib_include_paths = { LifeBoatAPI.Tools.Filepath:new(current_project.path) }
+  for _, path in ipairs(current_project.config.libraries) do
+    table.insert(lib_include_paths, LifeBoatAPI.Tools.Filepath:new(path))
   end
 
-  temp_file:write(build_script)
-  temp_file:close()
+  -- Initialize the builder
+  local builder = LifeBoatAPI.Tools.Builder:new(
+    lib_include_paths,
+    LifeBoatAPI.Tools.Filepath:new(build_params.outputDir),
+    LifeBoatAPI.Tools.Filepath:new(STANDARD_LIB_PATH),
+    nil
+  )
 
-  -- Prepare build arguments
-  local args = {
-    vim.fn.expand(build_params.luaDocsAddonPath),
-    vim.fn.expand(build_params.luaDocsMCPath),
-    vim.fn.expand(build_params.outputDir),
-    build_params.boilerPlate,
-    tostring(build_params.reduceAllWhitespace),
-    tostring(build_params.reduceNewlines),
-    tostring(build_params.removeRedundancies),
-    tostring(build_params.shortenVariables),
-    tostring(build_params.shortenGlobals),
-    tostring(build_params.shortenNumbers),
-    tostring(build_params.forceNCBoilerplate),
-    tostring(build_params.forceBoilerplate),
-    tostring(build_params.shortenStringDuplicates),
-    tostring(build_params.removeComments),
-    tostring(build_params.skipCombinedFileOutput),
-  }
-
-  -- Add root directories (current project)
-  table.insert(args, current_project.path)
-
-  -- Build the lua command
-  local lua_cmd = "lua " .. temp_script_path .. " " .. table.concat(args, " ")
-
-  print("🚀 Building " .. (is_microcontroller and "microcontroller" or "addon") .. " project...")
-
-  -- Create a new terminal buffer for build output
-  vim.cmd("botright new")
-  vim.cmd("resize 15")
-
-  -- Execute the build command in the terminal
-  local job_id = vim.fn.termopen(lua_cmd, {
-    cwd = current_project.path,
-    on_exit = function(_, exit_code)
-      -- Clean up temp file
-      os.remove(temp_script_path)
-
-      if exit_code == 0 then
-        print("✅ LifeBoat build successful!")
-      else
-        print("❌ LifeBoat build failed with exit code: " .. exit_code)
-      end
-    end,
-  })
-
-  if job_id == 0 then
-    print("✗ Failed to start LifeBoat build process")
-    os.remove(temp_script_path)
-  end
-end
-
--- Function to generate dynamic build script
-function M.generate_build_script(project_path, is_microcontroller, build_params)
-  local script_content = [[
---- @diagnostic disable: undefined-global
-
-require("LifeBoatAPI.Tools.Build.Builder")
-
--- replace newlines
-for k,v in pairs(arg) do
-    arg[k] = v:gsub("##LBNEWLINE##", "\n")
-end
-
-local luaDocsAddonPath  = LifeBoatAPI.Tools.Filepath:new(arg[1]);
-local luaDocsMCPath     = LifeBoatAPI.Tools.Filepath:new(arg[2]);
-local outputDir         = LifeBoatAPI.Tools.Filepath:new(arg[3]);
-local params            = {
-    boilerPlate             = arg[4],
-    reduceAllWhitespace     = arg[5] == "true",
-    reduceNewlines          = arg[6] == "true",
-    removeRedundancies      = arg[7] == "true",
-    shortenVariables        = arg[8] == "true",
-    shortenGlobals          = arg[9] == "true",
-    shortenNumbers          = arg[10]== "true",
-    forceNCBoilerplate      = arg[11]== "true",
-    forceBoilerplate        = arg[12]== "true",
-    shortenStringDuplicates = arg[13]== "true",
-    removeComments          = arg[14]== "true",
-    skipCombinedFileOutput  = arg[15]== "true"
-};
-local rootDirs          = {};
-
-for i=15, #arg do
-    table.insert(rootDirs, LifeBoatAPI.Tools.Filepath:new(arg[i]));
-end
-
-local _builder = LifeBoatAPI.Tools.Builder:new(rootDirs, outputDir, luaDocsMCPath, luaDocsAddonPath)
-
-local combinedText, outText, outFile
-
-if onLBBuildStarted then onLBBuildStarted(_builder, params, LifeBoatAPI.Tools.Filepath:new("]] .. project_path .. [[")) end
-]]
-
-  -- Find all .lua files in project (excluding build directories)
-  local exclude_patterns = {
-    "_build",
-    "out",
-    ".vscode",
-    "_examples_and_tutorials",
-    ".git",
-    "node_modules",
-    "target",
-  }
-
+  -- Find all .lua files in the project
   local function should_exclude(path)
+    local exclude_patterns = {
+      "_build",
+      "out",
+      ".vscode",
+      "_examples_and_tutorials",
+      ".git",
+      "node_modules",
+      "target",
+    }
     for _, pattern in ipairs(exclude_patterns) do
       if path:find(pattern) then
         return true
@@ -432,7 +338,6 @@ if onLBBuildStarted then onLBBuildStarted(_builder, params, LifeBoatAPI.Tools.Fi
     return false
   end
 
-  -- Recursively find .lua files
   local function find_lua_files(dir, files)
     files = files or {}
     local handle = vim.loop.fs_scandir(dir)
@@ -457,54 +362,19 @@ if onLBBuildStarted then onLBBuildStarted(_builder, params, LifeBoatAPI.Tools.Fi
     return files
   end
 
-  local lua_files = find_lua_files(project_path)
+  local lua_files = find_lua_files(current_project.path)
 
-  -- Generate build commands for each file
+  -- Build each Lua file
   for _, file_path in ipairs(lua_files) do
-    local relative_path = file_path:gsub("^" .. project_path .. "/", "")
-
+    local relative_path = file_path:gsub("^" .. current_project.path .. "/", "")
     local build_method = is_microcontroller and "buildMicrocontroller" or "buildAddonScript"
+    local originalText, combinedText, finalText, outFile =
+      builder[build_method](builder, relative_path, LifeBoatAPI.Tools.Filepath:new(file_path), build_params)
 
-    script_content = script_content
-      .. string.format(
-        [[
-
-if onLBBuildFileStarted then onLBBuildFileStarted(_builder, params, LifeBoatAPI.Tools.Filepath:new("%s"), "%s", LifeBoatAPI.Tools.Filepath:new("%s")) end
-
-combinedText, outText, outFile = _builder:%s("%s", LifeBoatAPI.Tools.Filepath:new("%s"), params)
-
-if onLBBuildFileComplete then onLBBuildFileComplete(LifeBoatAPI.Tools.Filepath:new("%s"), "%s", LifeBoatAPI.Tools.Filepath:new("%s"), outFile, combinedText, outText) end
-]],
-        project_path,
-        relative_path,
-        file_path,
-        build_method,
-        relative_path,
-        file_path,
-        project_path,
-        relative_path,
-        file_path
-      )
+    print("Built file: " .. file_path .. " -> " .. tostring(outFile))
   end
 
-  -- Check for custom build actions
-  local build_actions_path = project_path .. "/_build/_buildactions.lua"
-  if file_exists(build_actions_path) then
-    script_content = script_content .. '\nrequire("_build._buildactions")\n'
-  end
-
-  -- Add completion hook
-  script_content = script_content
-    .. string.format(
-      [[
-
-if onLBBuildComplete then onLBBuildComplete(_builder, params, LifeBoatAPI.Tools.Filepath:new("%s")) end
---- @diagnostic enable: undefined-global
-]],
-      project_path
-    )
-
-  return script_content
+  print("✅ Build process completed successfully.")
 end
 
 -- Function to get build parameters from project config
@@ -551,8 +421,21 @@ function M.add_library(lib_path)
   -- Add to current session
   table.insert(project_libs, expanded_path)
 
-  -- TODO: Save to project config file
-  print("✓ Added library: " .. expanded_path)
+  -- Save to project config file
+  local config_path = vim.fn.getcwd() .. "/.microproject"
+  local project_config = load_project_config()
+  project_config.libraries = project_config.libraries or {}
+  table.insert(project_config.libraries, expanded_path)
+
+  local file = io.open(config_path, "w")
+  if file then
+    file:write("-- Microcontroller Project Configuration\n")
+    file:write("return " .. vim.inspect(project_config))
+    file:close()
+    print("✓ Saved library to project config file: " .. expanded_path)
+  else
+    print("✗ Failed to save library to project config")
+  end
 end
 
 -- Setup function called by user in their config

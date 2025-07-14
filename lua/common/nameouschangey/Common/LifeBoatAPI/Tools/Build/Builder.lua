@@ -4,10 +4,10 @@
 --- Developed using LifeBoatAPI - Stormworks Lua plugin for VSCode - https://code.visualstudio.com/download (search "Stormworks Lua with LifeboatAPI" extension)
 --- If you have any issues, please report them here: https://github.com/nameouschangey/STORMWORKS_VSCodeExtension/issues - by Nameous Changey
 
-require("LifeBoatAPI.Tools.Utils.Base")
-require("LifeBoatAPI.Tools.Build.Combiner")
-require("LifeBoatAPI.Tools.Build.Minimizer")
-require("LifeBoatAPI.Tools.Build.ParsingConstantsLoader")
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.Base")
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Build.Combiner")
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Build.Minimizer")
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Build.ParsingConstantsLoader")
 
 -- A simpler setup for the Minimizer and Combiner, to make them more user friendly
 ---@class Builder
@@ -20,7 +20,10 @@ require("LifeBoatAPI.Tools.Build.ParsingConstantsLoader")
 LifeBoatAPI.Tools.Builder = {
 
   ---@param cls Builder
+  ---@param rootDirs Filepath[]
   ---@param outputDirectory Filepath
+  ---@param microcontrollerDoc Filepath
+  ---@param addonDoc Filepath
   ---@return Builder
   new = function(cls, rootDirs, outputDirectory, microcontrollerDoc, addonDoc)
     ---@type Builder
@@ -28,11 +31,13 @@ LifeBoatAPI.Tools.Builder = {
     self.outputDirectory = outputDirectory
 
     self.vehicle_constants = self:_setupVehicleConstants(microcontrollerDoc)
-    self.mission_constants = self:_setupMissionConstants(addonDoc)
+    self.mission_constants = addonDoc and self:_setupMissionConstants(addonDoc) or nil
 
     self.combiner = LifeBoatAPI.Tools.Combiner:new()
-    for i = 1, #rootDirs do
-      self.combiner:addRootFolder(rootDirs[i])
+    for _, rootDir in ipairs(rootDirs) do
+      rootDir = rootDir ---@type Filepath
+      print("Dir added: " .. rootDir:linux())
+      self.combiner:addRootFolder(rootDir)
     end
     return self
   end,
@@ -83,6 +88,9 @@ LifeBoatAPI.Tools.Builder = {
     return originalText, combinedText, finalText, outFile
   end,
 
+  ---@param self any
+  ---@param docpath Filepath
+  ---@return ParsingConstantsLoader
   _setupVehicleConstants = function(self, docpath)
     local constants = LifeBoatAPI.Tools.ParsingConstantsLoader:new()
     constants:addRestrictedKeywords(constants._vehicle_restricted_callbacks) -- select from _vehicle_restricted and _mission_restricted

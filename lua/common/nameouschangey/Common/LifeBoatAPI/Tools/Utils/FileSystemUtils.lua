@@ -4,101 +4,153 @@
 --- Developed using LifeBoatAPI - Stormworks Lua plugin for VSCode - https://code.visualstudio.com/download (search "Stormworks Lua with LifeboatAPI" extension)
 --- If you have any issues, please report them here: https://github.com/nameouschangey/STORMWORKS_VSCodeExtension/issues - by Nameous Changey
 
-require("LifeBoatAPI.Tools.Utils.Base")
-require("LifeBoatAPI.Tools.Utils.TableUtils")
-require("LifeBoatAPI.Tools.Utils.Filepath")
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.Base")
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.TableUtils")
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.Filepath")
 
 ---@class FileSystemUtils
 LifeBoatAPI.Tools.FileSystemUtils = {
 
-    --- Copies the given source file to the given destination filepath
-    ---@param sourceFilepath Filepath
-    ---@param destinationFilepath Filepath
-    copyFile = function(sourceFilepath, destinationFilepath)
-        local fileContents = LifeBoatAPI.Tools.FileSystemUtils.readAllText(sourceFilepath)
-        LifeBoatAPI.Tools.FileSystemUtils.writeAllText(destinationFilepath, fileContents)
-    end;
+  --- Copies the given source file to the given destination filepath
+  ---@param sourceFilepath Filepath
+  ---@param destinationFilepath Filepath
+  copyFile = function(sourceFilepath, destinationFilepath)
+    local fileContents = LifeBoatAPI.Tools.FileSystemUtils.readAllText(sourceFilepath)
+    if fileContents then
+      LifeBoatAPI.Tools.FileSystemUtils.writeAllText(destinationFilepath, fileContents)
+    end
+  end,
 
-    ---@param filepath Filepath
-    openForWrite = function(filepath)
-        os.execute("\"mkdir \"" .. filepath:directory():win() .. "\" 2>nul\"")
-        local file = io.open(filepath:win(), "wb")
-        return file
-    end;
+  ---@param filepath Filepath
+  openForWrite = function(filepath)
+    os.execute('mkdir -p "' .. filepath:directory():linux() .. '" 2>/dev/null')
+    local file = io.open(filepath:linux(), "wb")
+    return file
+  end,
 
-    ---reads all text from a file and returns it as a string
-    ---@param filePath Filepath path to read from
-    ---@return string text from the file
-    readAllText = function(filePath)
-        local file = io.open(filePath:win(), "r")
-        local data = file:read("*a")
-        file:close()
-        return data
-    end;
+  ---reads all text from a file and returns it as a string
+  ---@param filePath Filepath path to read from
+  ---@return string text from the file
+  readAllText = function(filePath)
+    local file = io.open(filePath:linux(), "r")
+    if not file then
+      error(
+        "File: "
+          .. filePath.rawPath
+          .. " as linux: "
+          .. filePath:linux()
+          .. " is nil!"
+          .. "\nCheck that the file exists and the path is correct."
+      )
+    end
+    local data = file:read("*a")
+    file:close()
+    return data
+  end,
 
-    ---writes the given text to a file, overwriting the existing file
-    ---@param text string text to write to the file
-    ---@param filePath Filepath path to write to
-    writeAllText = function(filePath, text)
-        local outputFileHandle = LifeBoatAPI.Tools.FileSystemUtils.openForWrite(filePath)
-        outputFileHandle:write(text)
-        outputFileHandle:close()
-    end;
+  ---writes the given text to a file, overwriting the existing file
+  ---@param text string text to write to the file
+  ---@param filePath Filepath path to write to
+  writeAllText = function(filePath, text)
+    local outputFileHandle = LifeBoatAPI.Tools.FileSystemUtils.openForWrite(filePath)
+    outputFileHandle:write(text)
+    outputFileHandle:close()
+  end,
 
-    ---@param dirPath Filepath directory to search in
-    ---@return string[] list of directory paths
-    findDirsInDir = function (dirPath)
-        return LifeBoatAPI.Tools.FileSystemUtils.findPathsInDir(dirPath, "/ad")
-    end;
+  ---@param dirPath Filepath
+  ---@param pattern string? optional pattern to filter files (lua pattern, not shell glob)
+  ---@return string[] list of filepaths
+  findPathsInDir = function(dirPath, pattern)
+    local result = {}
 
-    ---@param dirPath Filepath directory to search in
-    ---@return string[] list of filepaths
-    findFilesInDir = function (dirPath)
-        return LifeBoatAPI.Tools.FileSystemUtils.findPathsInDir(dirPath, "/a-d")
-    end;
+    -- Use vim.fn.glob to get files/directories
+    local globPattern = dirPath:linux() .. "/*"
+    local items = vim.fn.glob(globPattern, false, true)
 
-    ---@param dirPath Filepath directory to search in
-    ---@param commandlinePattern string pattern to use to select the type of file/directory desired
-    ---@return string[] list of filepaths
-    findPathsInDir = function (dirPath, commandlinePattern)
-        local result = {}
-        local processCommand = 'dir "'..dirPath:win()..'" /b ' .. commandlinePattern .. ' 2>nul'
-        local process = io.popen('"' .. processCommand .. '"')
-
-        for filename in process:lines() do
-            result[#result+1] = filename
+    if pattern then
+      -- Filter results using lua pattern matching
+      for _, item in ipairs(items) do
+        local basename = vim.fn.fnamemodify(item, ":t")
+        if string.match(basename, pattern) then
+          result[#result + 1] = basename
         end
-        process:close()
-        return result
-    end;
+      end
+    else
+      -- Return all basenames without filtering
+      for _, item in ipairs(items) do
+        local basename = vim.fn.fnamemodify(item, ":t")
+        result[#result + 1] = basename
+      end
+    end
 
-    ---@param dirPath Filepath root to start search in
-    ---@return Filepath[] list of filepaths in all subfolders
-    findFilesRecursive = function (dirPath, ignore, extensions, addedDirs)
-        addedDirs = addedDirs or ""
-        local files = {}
+    return result
+  end,
 
-        local filesInDir = LifeBoatAPI.Tools.FileSystemUtils.findFilesInDir(dirPath)
-        for i=1, #filesInDir do
-            local filename = filesInDir[i]
-            local ext = LifeBoatAPI.Tools.StringUtils.split(filename, ".")
-            if (not extensions or extensions[ext[2]]) then
-                local file = dirPath:add("/" .. filename)
-                files[#files+1] = file
-            end
-        end
+  ---@param dirPath Filepath
+  ---@return string[] list of directory names
+  findDirsInDir = function(dirPath)
+    local result = {}
+    local globPattern = dirPath:linux() .. "/*"
+    local items = vim.fn.glob(globPattern, false, true)
 
-        local dirsInDir = LifeBoatAPI.Tools.FileSystemUtils.findDirsInDir(dirPath)
-        for i=1, #dirsInDir do
-            local dirname = dirsInDir[i]
-            local addedDir = addedDirs .. "/" .. dirname
-            if not ignore or (not ignore[dirname] and not ignore[addedDir]) then
-                local dir = dirPath:add("/" .. dirname)
-                local filesInDir = LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(dir, ignore, extensions, addedDir)
-                LifeBoatAPI.Tools.TableUtils.iaddRange(files, filesInDir)
-            end
-        end
-        
-        return files
-    end;
+    for _, item in ipairs(items) do
+      if vim.fn.isdirectory(item) == 1 then
+        local basename = vim.fn.fnamemodify(item, ":t")
+        result[#result + 1] = basename
+      end
+    end
+
+    return result
+  end,
+
+  ---@param dirPath Filepath
+  ---@return string[] list of filenames
+  findFilesInDir = function(dirPath)
+    local result = {}
+    local globPattern = dirPath:linux() .. "/*"
+    local items = vim.fn.glob(globPattern, false, true)
+
+    for _, item in ipairs(items) do
+      if vim.fn.isdirectory(item) == 0 then
+        local basename = vim.fn.fnamemodify(item, ":t")
+        result[#result + 1] = basename
+      end
+    end
+
+    return result
+  end,
+
+  ---@param dirPath Filepath root to start search in
+  ---@return Filepath[] list of filepaths in all subfolders
+  findFilesRecursive = function(dirPath, ignore, extensions, addedDirs)
+    addedDirs = addedDirs or ""
+    local files = {}
+
+    local filesInDir = LifeBoatAPI.Tools.FileSystemUtils.findFilesInDir(dirPath) -- Avoid redefinition
+    for i = 1, #filesInDir do
+      local filename = filesInDir[i]
+      local ext = LifeBoatAPI.Tools.StringUtils.split(filename, ".")
+      if not extensions or (extensions[ext[2]] and #ext < 3) then
+        local file = dirPath:add("/" .. filename)
+        print("Adding file with filename: " .. filename .. " at: " .. file:linux())
+        table.insert(files, file)
+      end
+    end
+
+    local dirsInDir = LifeBoatAPI.Tools.FileSystemUtils.findDirsInDir(dirPath)
+    for i = 1, #dirsInDir do
+      local dirname = dirsInDir[i]
+      local addedDir = addedDirs .. "/" .. dirname
+      if not ignore or (not ignore[dirname] and not ignore[addedDir]) then
+        local dir = dirPath:add("/" .. dirname)
+        LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(dir, ignore, extensions, addedDir)
+        LifeBoatAPI.Tools.TableUtils.iaddRange(files, filesInDir)
+      end
+    end
+
+    for _, file in ipairs(files) do
+      print(type(file) .. " Found file: " .. (type(file) == "table" and file:linux() or file) .. "!")
+    end
+    return files
+  end,
 }
