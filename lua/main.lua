@@ -290,7 +290,7 @@ function M.setup_project_libraries()
 end
 
 -- Build function for microcontroller projects using LifeBoat API
-function M.build_micro_project()
+function M.build_micro_project(single_file)
   if not current_project then
     print("No microcontroller project detected. Run :SetupMicroProject first.")
     return
@@ -319,59 +319,28 @@ function M.build_micro_project()
     nil
   )
 
-  -- Find all .lua files in the project
-  local function should_exclude(path)
-    local exclude_patterns = {
-      "_build",
-      "out",
-      ".vscode",
-      "_examples_and_tutorials",
-      ".git",
-      "node_modules",
-      "target",
-    }
-    for _, pattern in ipairs(exclude_patterns) do
-      if path:find(pattern) then
-        return true
-      end
-    end
-    return false
-  end
+  print(single_file and ("Compiling for single: " .. tostring(single_file) .. "!") or "")
 
-  local function find_lua_files(dir, files)
-    files = files or {}
-    local handle = vim.loop.fs_scandir(dir)
-
-    if handle then
-      while true do
-        local name, type = vim.loop.fs_scandir_next(handle)
-        if not name then
-          break
-        end
-
-        local full_path = dir .. "/" .. name
-
-        if type == "directory" and not should_exclude(full_path) then
-          find_lua_files(full_path, files)
-        elseif type == "file" and name:match("%.lua$") and not should_exclude(full_path) then
-          table.insert(files, full_path)
-        end
-      end
-    end
-
-    return files
-  end
-
-  local lua_files = find_lua_files(current_project.path)
+  local lua_files = single_file and { LifeBoatAPI.Tools.Filepath:new(single_file) }
+    or LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(
+      current_project.path,
+      { [".vscode"] = 1, ["_build"] = 1, [".git"] = 1 },
+      { ["lua"] = 1, ["luah"] = 1 }
+    )
 
   -- Build each Lua file
   for _, file_path in ipairs(lua_files) do
-    local relative_path = file_path:gsub("^" .. current_project.path .. "/", "")
+    local relative_path = file_path:linux()
     local build_method = is_microcontroller and "buildMicrocontroller" or "buildAddonScript"
-    local originalText, combinedText, finalText, outFile =
-      builder[build_method](builder, relative_path, LifeBoatAPI.Tools.Filepath:new(file_path), build_params)
+    local originalText, combinedText, finalText, outFile = builder[build_method](
+      builder,
+      relative_path,
+      LifeBoatAPI.Tools.Filepath:new(current_project.path .. file_path:linux()),
+      build_params
+    )
 
-    print("Built file: " .. file_path .. " -> " .. tostring(outFile))
+    print("Built file: " .. file_path:linux() .. " -> " .. tostring(outFile:linux()))
+    LifeBoatAPI.Tools.FileSystemUtils.writeAllText(outFile, finalText)
   end
 
   print("✅ Build process completed successfully.")
@@ -382,7 +351,7 @@ function M.get_build_params(project_config)
   local defaults = {
     luaDocsAddonPath = "../common/addon-docs",
     luaDocsMCPath = "../common/mc-docs",
-    outputDir = "_build/out",
+    outputDir = current_project.path,
     boilerPlate = "default",
     reduceAllWhitespace = true,
     reduceNewlines = true,
@@ -455,6 +424,8 @@ function M.setup(user_config)
       M.setup_project_libraries()
     elseif subcommand == "build" then
       M.build_micro_project()
+    elseif subcommand == "here" then
+      M.build_micro_project(string.gsub(vim.api.nvim_buf_get_name(0), vim.loop.cwd(), ""))
     elseif subcommand == "add" then
       if opts.fargs[2] then
         M.add_library(opts.fargs[2])

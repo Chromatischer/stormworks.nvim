@@ -106,6 +106,10 @@ LifeBoatAPI.Tools.FileSystemUtils = {
   ---@param dirPath Filepath
   ---@return string[] list of filenames
   findFilesInDir = function(dirPath)
+    if vim.fn.isdirectory(dirPath:linux()) == 0 then
+      print(dirPath:linux() .. " is file!")
+      return { vim.fn.fnamemodify(dirPath:linux(), ":t") }
+    end
     local result = {}
     local globPattern = dirPath:linux() .. "/*"
     local items = vim.fn.glob(globPattern, false, true)
@@ -121,36 +125,39 @@ LifeBoatAPI.Tools.FileSystemUtils = {
   end,
 
   ---@param dirPath Filepath root to start search in
+  ---@param ignore table? optional table of directory names to ignore
+  ---@param extensions table? optional table of file extensions to include (e.g., {lua = true, txt = true})
   ---@return Filepath[] list of filepaths in all subfolders
-  findFilesRecursive = function(dirPath, ignore, extensions, addedDirs)
-    addedDirs = addedDirs or ""
+  findFilesRecursive = function(dirPath, ignore, extensions)
+    --TODO: Rework the ignore and extensions to exclude instead of include!
     local files = {}
+    local dirsToProcess = { dirPath }
 
-    local filesInDir = LifeBoatAPI.Tools.FileSystemUtils.findFilesInDir(dirPath) -- Avoid redefinition
-    for i = 1, #filesInDir do
-      local filename = filesInDir[i]
-      local ext = LifeBoatAPI.Tools.StringUtils.split(filename, ".")
-      if not extensions or (extensions[ext[2]] and #ext < 3) then
-        local file = dirPath:add("/" .. filename)
-        print("Adding file with filename: " .. filename .. " at: " .. file:linux())
-        table.insert(files, file)
+    while #dirsToProcess > 0 do
+      local currentDir = table.remove(dirsToProcess)
+
+      -- Get files in current directory
+      local filesInDir = LifeBoatAPI.Tools.FileSystemUtils.findFilesInDir(currentDir)
+      for _, basename in ipairs(filesInDir) do
+        local ext = LifeBoatAPI.Tools.StringUtils.split(basename, ".")
+        local fileExt = ext[#ext] -- Get last part as extension
+
+        if extensions and extensions[fileExt] then
+          local file = currentDir:add("/" .. basename)
+          table.insert(files, file)
+        end
+      end
+
+      -- Get subdirectories to process
+      local dirsInDir = LifeBoatAPI.Tools.FileSystemUtils.findDirsInDir(currentDir)
+      for _, dirname in ipairs(dirsInDir) do
+        if ignore and not ignore[dirname] then
+          local subDir = currentDir:add("/" .. dirname)
+          table.insert(dirsToProcess, subDir)
+        end
       end
     end
 
-    local dirsInDir = LifeBoatAPI.Tools.FileSystemUtils.findDirsInDir(dirPath)
-    for i = 1, #dirsInDir do
-      local dirname = dirsInDir[i]
-      local addedDir = addedDirs .. "/" .. dirname
-      if not ignore or (not ignore[dirname] and not ignore[addedDir]) then
-        local dir = dirPath:add("/" .. dirname)
-        LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(dir, ignore, extensions, addedDir)
-        LifeBoatAPI.Tools.TableUtils.iaddRange(files, filesInDir)
-      end
-    end
-
-    for _, file in ipairs(files) do
-      print(type(file) .. " Found file: " .. (type(file) == "table" and file:linux() or file) .. "!")
-    end
     return files
   end,
 }

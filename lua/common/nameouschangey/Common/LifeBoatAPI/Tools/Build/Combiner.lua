@@ -32,7 +32,6 @@ LifeBoatAPI.Tools.Combiner = {
   addRootFolder = function(this, rootDirectory)
     print("Adding rootFolder: " .. rootDirectory:linux())
     local filesByRequire = this:_getDataByRequire(rootDirectory)
-    assert(#filesByRequire > 0, "Length of filesByRequire is 0!")
     for _, value in ipairs(filesByRequire) do
       print("File: " .. value)
     end
@@ -44,7 +43,7 @@ LifeBoatAPI.Tools.Combiner = {
   ---@param outputFile Filepath
   combineFile = function(this, entryPointFile, outputFile)
     local text = LifeBoatAPI.Tools.FileSystemUtils.readAllText(entryPointFile)
-    local combinedText = this:combine(text)
+    local combinedText = this:combine(text, entryPointFile)
     LifeBoatAPI.Tools.FileSystemUtils.writeAllText(outputFile, combinedText)
 
     return combinedText
@@ -52,7 +51,7 @@ LifeBoatAPI.Tools.Combiner = {
 
   ---@param this Combiner
   ---@param data string
-  combine = function(this, data)
+  combine = function(this, data, entryPointFile)
     data = "\n" .. data -- ensure the file starts with a new line, so any first-line requires get found
 
     local requiresSeen = {}
@@ -87,7 +86,7 @@ LifeBoatAPI.Tools.Combiner = {
             for _, value in ipairs(this.filesByRequire) do
               print("Contains: " .. value)
             end
-            error("Require " .. require .. " was not found.")
+            error("Require " .. require .. " was not found when building: " .. entryPointFile:linux() .. "!")
           end
         end
       end
@@ -116,6 +115,7 @@ LifeBoatAPI.Tools.Combiner = {
       requireName = requireName:gsub("%.init.lua$", "") -- if name is init.lua, strip it
       requireName = requireName:gsub("%.lua$", "") -- if name ends in .lua, strip it
       requireName = requireName:gsub("%.luah$", "") -- "hidden" lua files
+      print("Requirename: " .. requireName)
 
       requiresToFilecontents[requireName] = filename
     end

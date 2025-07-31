@@ -74,7 +74,7 @@ LifeBoatAPI.Tools.Builder = {
 
     local originalText = LifeBoatAPI.Tools.FileSystemUtils.readAllText(entrypointFile)
 
-    local combinedText = self.combiner:combine(originalText)
+    local combinedText = self.combiner:combine(originalText, entrypointFile)
     if not params.skipCombinedFileOutput then
       LifeBoatAPI.Tools.FileSystemUtils.writeAllText(cmbFile, combinedText)
     end
