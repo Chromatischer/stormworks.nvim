@@ -129,7 +129,6 @@ LifeBoatAPI.Tools.FileSystemUtils = {
   ---@param extensions table? optional table of file extensions to include (e.g., {lua = true, txt = true})
   ---@return Filepath[] list of filepaths in all subfolders
   findFilesRecursive = function(dirPath, ignore, extensions)
-    --TODO: Rework the ignore and extensions to exclude instead of include!
     local files = {}
     local dirsToProcess = { dirPath }
 

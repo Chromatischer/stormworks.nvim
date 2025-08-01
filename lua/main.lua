@@ -323,19 +323,21 @@ function M.build_micro_project(single_file)
 
   local lua_files = single_file and { LifeBoatAPI.Tools.Filepath:new(single_file) }
     or LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(
-      current_project.path,
+      LifeBoatAPI.Tools.Filepath:new(current_project.path),
       { [".vscode"] = 1, ["_build"] = 1, [".git"] = 1 },
       { ["lua"] = 1, ["luah"] = 1 }
     )
 
   -- Build each Lua file
   for _, file_path in ipairs(lua_files) do
-    local relative_path = file_path:linux()
+    print(not single_file and ("Compiling multi: " .. tostring(file_path:linux()) .. "!") or "")
+    local relative_path = single_file and file_path:linux()
+      or file_path:linux():gsub(tostring(current_project.path), "")
     local build_method = is_microcontroller and "buildMicrocontroller" or "buildAddonScript"
     local originalText, combinedText, finalText, outFile = builder[build_method](
       builder,
       relative_path,
-      LifeBoatAPI.Tools.Filepath:new(current_project.path .. file_path:linux()),
+      LifeBoatAPI.Tools.Filepath:new(current_project.path .. relative_path),
       build_params
     )
 
@@ -348,6 +350,7 @@ end
 
 -- Function to get build parameters from project config
 function M.get_build_params(project_config)
+  assert(current_project ~= nil, "current_project is nil but it should definetly not be that way!")
   local defaults = {
     luaDocsAddonPath = "../common/addon-docs",
     luaDocsMCPath = "../common/mc-docs",
@@ -437,6 +440,7 @@ function M.setup(user_config)
       print("  :MicroProject mark     - Mark current directory as microcontroller project")
       print("  :MicroProject setup    - Setup project libraries")
       print("  :MicroProject build    - Build the project")
+      print("  :MicroProject here     - Build the current file only")
       print("  :MicroProject add <path> - Add library to project")
     end
   end, {
@@ -446,7 +450,7 @@ function M.setup(user_config)
 
       -- Complete subcommands
       if #parts <= 2 then
-        local subcommands = { "mark", "setup", "build", "add" }
+        local subcommands = { "mark", "setup", "build", "add", "here" }
         local partial = parts[2] or ""
         return vim.tbl_filter(function(cmd)
           return cmd:find("^" .. partial)
