@@ -15,6 +15,8 @@ require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Bui
 require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Build.NumberLiteralReducer")
 require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Build.HexadecimalConverter")
 
+TOTAL_CHAR_LIMIT = 8100 -- Giving some wiggle room just like nameouschangey says to!
+
 ---@class MinimizerParams
 ---@field reduceAllWhitespace   boolean if true, shortens all whitespace duplicates where possible
 ---@field reduceNewlines        boolean if true, reduces duplicate newlines but not other whitespace
@@ -72,6 +74,7 @@ LifeBoatAPI.Tools.Minimizer = {
   ---@param text string text to be minimized
   ---@param this Minimizer
   ---@return string minimized
+  ---@return number sizeWithoutBoilerplate
   minimize = function(this, text, boilerplate)
     boilerplate = boilerplate or ""
 
@@ -141,29 +144,42 @@ LifeBoatAPI.Tools.Minimizer = {
 
     local sizeWithoutBoilerplate = #text
 
-    local nameousBoilerplateSize = 233 + #tostring(sizeWithoutBoilerplate) + #tostring(#text)
-    local predictedBoilerplateSize = (
-      (this.params.forceNCBoilerplate or (#text + #boilerplate + nameousBoilerplateSize < 4000))
-      and nameousBoilerplateSize + #boilerplate
-    )
-      or ((this.params.forceBoilerplate or (#text + #boilerplate < 4000)) and #boilerplate)
-      or 0
+    -- Calculate boilerplate sizes
+    local nameousSize = 233 + #tostring(sizeWithoutBoilerplate) + #tostring(#text)
+    local predictedBoilerplateSize = 0
 
-    -- add boilerplate if the file is small enough
-    -- please do not remove this, the user's boilerplate has precedence over the nameous changey one
-    -- but if your resulting file has space - it is polite to include this; a significant effort went into making the minimizer
-    local nameousBoilerplate = [[-- Developed & Minimized using LifeBoatAPI - Stormworks Lua plugin for VSCode
--- https://code.visualstudio.com/download (search "Stormworks Lua with LifeboatAPI" extension)
---      By Nameous Changey]] .. "\n-- Minimized Size: " .. tostring(sizeWithoutBoilerplate) .. " (" .. tostring(
+    if this.params.forceNCBoilerplate or (#text + #boilerplate + nameousSize < TOTAL_CHAR_LIMIT) then
+      predictedBoilerplateSize = nameousSize + #boilerplate
+    elseif this.params.forceBoilerplate or (#text + #boilerplate < TOTAL_CHAR_LIMIT) then
+      predictedBoilerplateSize = #boilerplate
+    end
+
+    -- Create Appendix for Port creators
+    local additionalBoilerplate = [[Ported for Neovim by Chromatischer]]
+
+    -- Create Nameous boilerplate comment
+    local nameousBoilerplate = ([[-- Developed & Minimized using LifeBoatAPI - Stormworks Lua plugin for VSCode
+    -- https://code.visualstudio.com/download (search "Stormworks Lua with LifeboatAPI" extension)
+    --      By Nameous Changey
+    -- %s
+    -- Minimized Size: %s (%s with comment) chars]]):format(
+      additionalBoilerplate,
+      sizeWithoutBoilerplate,
       sizeWithoutBoilerplate + predictedBoilerplateSize
-    ) .. " with comment) chars"
+    )
 
-    local addedSpacing = not this.params.removeComments and "\n\n" or ""
-    -- add boilerplate if the file is small enough (4000 chars instead of 4096, gives some slight wiggle room)
-    if this.params.forceNCBoilerplate or (#text + #boilerplate + #nameousBoilerplate < 4000) then
-      text = boilerplate .. "--\n" .. nameousBoilerplate .. "\n" .. addedSpacing .. text
-    elseif this.params.forceBoilerplate or #text + #boilerplate < 4000 then
-      text = boilerplate .. "\n" .. addedSpacing .. text
+    -- Add spacing only if comments are kept
+    local spacing = this.params.removeComments and "" or "\n\n"
+
+    -- Add boilerplate when space allows
+    local fullBoilerplateFits = this.params.forceNCBoilerplate
+      or (#text + #boilerplate + #nameousBoilerplate < TOTAL_CHAR_LIMIT)
+    local normalBoilerplateFits = this.params.forceBoilerplate or (#text + #boilerplate < TOTAL_CHAR_LIMIT)
+
+    if fullBoilerplateFits then
+      text = boilerplate .. "--\n" .. nameousBoilerplate .. "\n" .. spacing .. text
+    elseif normalBoilerplateFits then
+      text = boilerplate .. "\n" .. spacing .. text
     end
 
     return text, sizeWithoutBoilerplate
@@ -221,4 +237,3 @@ LifeBoatAPI.Tools.Minimizer = {
   end,
 }
 LifeBoatAPI.Tools.Class(LifeBoatAPI.Tools.Minimizer)
-

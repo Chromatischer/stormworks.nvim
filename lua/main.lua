@@ -1,6 +1,9 @@
 -- lua/micro-project/init.lua
 -- Main plugin module
 
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.Base")
+require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.FileSystemUtils")
+
 local M = {}
 
 local function get_plugin_directory()
@@ -11,7 +14,7 @@ local function get_plugin_directory()
 end
 
 -- Hardcoded standard library path (relative to plugin directory)
-local STANDARD_LIB_PATH = get_plugin_directory() .. "common/nameouschangey/MicroController/microcontroller.lua"
+local STANDARD_LIB_PATH = get_plugin_directory() .. "common/nameouschangey/Microcontroller/microcontroller.lua"
 
 -- Plugin configuration with sensible defaults
 M.config = {
@@ -119,10 +122,15 @@ function M.register_libraries_with_lsp(libraries)
   local library_files = {}
 
   for _, lib_path in ipairs(libraries) do
-    local lua_files = M.find_lua_files_in_directory(lib_path)
+    local lua_files = LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(
+      LifeBoatAPI.Tools.Filepath:new(lib_path),
+      { ["_release"] = 1, ["_intermediate"] = 1 },
+      { ["lua"] = 1 }
+    )
     print("In path: " .. lib_path .. " found: " .. #lua_files .. " files")
+    vim.notify("Path: " .. lib_path .. " found: " .. #lua_files .. " files")
     for _, file_path in ipairs(lua_files) do
-      table.insert(library_files, file_path)
+      table.insert(library_files, file_path:linux())
     end
   end
 
@@ -130,6 +138,8 @@ function M.register_libraries_with_lsp(libraries)
     print("No library files found to register with LSP")
     return
   end
+
+  table.insert(library_files, STANDARD_LIB_PATH)
 
   -- Get the Lua LSP client
   local clients = vim.lsp.get_clients({ name = "lua_ls" })
@@ -197,45 +207,10 @@ function M.register_libraries_with_lsp(libraries)
   vim.diagnostic.reset()
 
   -- Give it a moment then refresh
-  vim.defer_fn(function()
-    vim.lsp.buf.format({ async = false })
-    print("✅ LSP diagnostics refresh complete")
-  end, 1000)
-end
-
--- Helper function to recursively find Lua files in a directory
-function M.find_lua_files_in_directory(directory)
-  local lua_files = {}
-
-  local function scan_directory(dir)
-    local handle = vim.loop.fs_scandir(dir)
-    if not handle then
-      return
-    end
-
-    while true do
-      local name, type = vim.loop.fs_scandir_next(handle)
-      if not name then
-        break
-      end
-
-      local full_path = dir .. "/" .. name
-
-      if type == "directory" then
-        -- Recursively scan subdirectories
-        scan_directory(full_path)
-      elseif type == "file" and name:match("%.lua$") then
-        table.insert(lua_files, full_path)
-      end
-    end
-  end
-
-  if file_exists(directory) then
-    return { directory }
-  end
-
-  scan_directory(directory)
-  return lua_files
+  -- vim.defer_fn(function()
+  --   vim.lsp.buf.format({ async = false })
+  --   print("✓ LSP diagnostics refresh complete")
+  -- end, 1000)
 end
 
 -- Function to setup libraries for the current project
@@ -263,6 +238,7 @@ function M.setup_project_libraries()
     print("✓ Added standard microcontroller library: " .. std_lib)
   else
     print("⚠ Standard library not found at: " .. std_lib)
+    error("StdLib not found at: " .. std_lib)
   end
 
   -- Add user-defined libraries
@@ -324,13 +300,13 @@ function M.build_micro_project(single_file)
   local lua_files = single_file and { LifeBoatAPI.Tools.Filepath:new(single_file) }
     or LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(
       LifeBoatAPI.Tools.Filepath:new(current_project.path),
-      { [".vscode"] = 1, ["_build"] = 1, [".git"] = 1 },
+      { [".vscode"] = 1, ["_release"] = 1, ["_intermediate"] = 1, [".git"] = 1 },
       { ["lua"] = 1, ["luah"] = 1 }
     )
 
   -- Build each Lua file
   for _, file_path in ipairs(lua_files) do
-    print(not single_file and ("Compiling multi: " .. tostring(file_path:linux()) .. "!") or "")
+    --print(not single_file and ("Compiling multi: " .. tostring(file_path:linux()) .. "!") or "")
     local relative_path = single_file and file_path:linux()
       or file_path:linux():gsub(tostring(current_project.path), "")
     local build_method = is_microcontroller and "buildMicrocontroller" or "buildAddonScript"
@@ -341,7 +317,7 @@ function M.build_micro_project(single_file)
       build_params
     )
 
-    print("Built file: " .. file_path:linux() .. " -> " .. tostring(outFile:linux()))
+    --print("Built file: " .. file_path:linux() .. " -> " .. tostring(outFile:linux()))
     LifeBoatAPI.Tools.FileSystemUtils.writeAllText(outFile, finalText)
   end
 
@@ -355,7 +331,7 @@ function M.get_build_params(project_config)
     luaDocsAddonPath = "../common/addon-docs",
     luaDocsMCPath = "../common/mc-docs",
     outputDir = current_project.path,
-    boilerPlate = "default",
+    boilerPlate = "",
     reduceAllWhitespace = true,
     reduceNewlines = true,
     removeRedundancies = true,
@@ -477,6 +453,18 @@ function M.setup(user_config)
       end,
     })
   end
+
+  vim.api.nvim_create_autocmd("LspAttach", {
+    callback = function(args)
+      local client = vim.lsp.get_client_by_id(args.data.client_id)
+      local bufname = vim.api.nvim_buf_get_name(args.buf)
+
+      -- check if the file is inside your target directory
+      if bufname:match("_release") or bufname:match("_intermediate") then
+        client.stop() -- stops the LSP for this buffer
+      end
+    end,
+  })
 
   print("Micro-project plugin loaded!")
 end

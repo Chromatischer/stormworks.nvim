@@ -70,7 +70,7 @@ LifeBoatAPI.Tools.Builder = {
     params = params or {}
 
     local cmbFile = LifeBoatAPI.Tools.Filepath:new(self.outputDirectory:linux() .. [[/_intermediate/]] .. name, true)
-    local outFile = LifeBoatAPI.Tools.Filepath:new(self.outputDirectory:linux() .. [[/release/]] .. name, true)
+    local outFile = LifeBoatAPI.Tools.Filepath:new(self.outputDirectory:linux() .. [[/_release/]] .. name, true)
 
     local originalText = LifeBoatAPI.Tools.FileSystemUtils.readAllText(entrypointFile)
 

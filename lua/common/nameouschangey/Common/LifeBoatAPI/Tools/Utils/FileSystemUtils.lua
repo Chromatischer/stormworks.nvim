@@ -129,6 +129,12 @@ LifeBoatAPI.Tools.FileSystemUtils = {
   ---@param extensions table? optional table of file extensions to include (e.g., {lua = true, txt = true})
   ---@return Filepath[] list of filepaths in all subfolders
   findFilesRecursive = function(dirPath, ignore, extensions)
+    if ignore then
+      for index, value in pairs(ignore) do
+        print("Called with: " .. index .. " being: " .. value)
+      end
+    end
+
     local files = {}
     local dirsToProcess = { dirPath }
 
@@ -150,7 +156,8 @@ LifeBoatAPI.Tools.FileSystemUtils = {
       -- Get subdirectories to process
       local dirsInDir = LifeBoatAPI.Tools.FileSystemUtils.findDirsInDir(currentDir)
       for _, dirname in ipairs(dirsInDir) do
-        if ignore and not ignore[dirname] then
+        print(dirname .. " : ignore[] = " .. (ignore and ignore[dirname] or "unspecified"))
+        if not ignore or not ignore[dirname] then
           local subDir = currentDir:add("/" .. dirname)
           table.insert(dirsToProcess, subDir)
         end

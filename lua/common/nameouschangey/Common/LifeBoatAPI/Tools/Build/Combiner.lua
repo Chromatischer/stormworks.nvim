@@ -101,7 +101,7 @@ LifeBoatAPI.Tools.Combiner = {
     print("Searching: " .. rootDirectory:linux() .. " recursively!")
     local files = LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(
       rootDirectory,
-      { [".vscode"] = 1, ["_build"] = 1, [".git"] = 1 },
+      { [".vscode"] = 1, ["_release"] = 1, ["_intermediate"] = 1, [".git"] = 1 },
       { ["lua"] = 1, ["luah"] = 1 }
     )
 
@@ -109,13 +109,11 @@ LifeBoatAPI.Tools.Combiner = {
       if type(filename) ~= "table" then
         print("Filename is not Filepath object! " .. filename)
       end
-      print("File: " .. filename:linux() .. " added to: requiresToFilecontents!")
       local requireName = filename:linux():gsub(LifeBoatAPI.Tools.StringUtils.escape(rootDirectory:linux()) .. "/", "")
       requireName = requireName:gsub("/", ".") -- slashes -> . style
       requireName = requireName:gsub("%.init.lua$", "") -- if name is init.lua, strip it
       requireName = requireName:gsub("%.lua$", "") -- if name ends in .lua, strip it
       requireName = requireName:gsub("%.luah$", "") -- "hidden" lua files
-      print("Requirename: " .. requireName)
 
       requiresToFilecontents[requireName] = filename
     end
