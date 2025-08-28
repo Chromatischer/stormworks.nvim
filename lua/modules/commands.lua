@@ -64,13 +64,10 @@ function M.setup_autodetection()
 
   -- Auto-detect projects when entering directories
   if config.config.auto_detect then
-    --TODO: Fix autocmd not firering at the correct time!
-    --This autocmd should fire after the LSP has initialized for the first time for this project
     vim.api.nvim_create_autocmd({ "LspAttach" }, {
       group = aug,
       once = true,
       callback = function()
-        vim.notify("Ms")
         print("Executing autocmd")
         local marker_path = project.detect_micro_project()
         if marker_path then

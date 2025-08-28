@@ -6,9 +6,9 @@
 
 --- @diagnostic disable: lowercase-global
 
-input = {}
-output = {}
-property = {}
+input = {} -- Part of the IO-System of Stormworks Microcontrollers.
+output = {} -- Part of the IO-System of Stormworks Microcontrollers
+property = {} -- Allows reading property data
 screen = {}
 map = {}
 async = {}
@@ -227,4 +227,3 @@ function map.mapToScreen(mapX, mapY, zoom, screenWidth, screenHeight, worldX, wo
 --- @param port number The port number to execute the request on
 --- @param url string The URL to execute the request on
 function async.httpGet(port, url) end
-
