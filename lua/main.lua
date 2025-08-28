@@ -117,104 +117,100 @@ local function load_project_config()
   return {}
 end
 
--- Function to add library files to Lua LSP workspace
-function M.register_libraries_with_lsp(libraries)
-  if not current_project then
-    print("No microcontroller project active")
+--- Register libs with the lua-lsp set persist to true!
+--- NOTE: Set persist to true for this to work
+---
+--- @param libraries table<Filepath> The top level folder paths or files to include.
+--- @param opts {persist: false} A table of options
+function M.register_libraries_with_lsp(libraries, opts)
+  opts = opts or {}
+  local persist = opts.persist or false
+
+  if not libraries or #libraries == 0 then
+    print("⚠ No libraries provided")
     return
   end
-  print("Working on " .. #libraries .. " libraries")
-  -- Get all Lua files from project libraries
-  local library_files = {}
 
-  for _, lib_path in ipairs(libraries) do
-    local lua_files = LifeBoatAPI.Tools.FileSystemUtils.findFilesRecursive(
-      LifeBoatAPI.Tools.Filepath:new(lib_path),
-      { ["_release"] = 1, ["_intermediate"] = 1 },
-      { ["lua"] = 1 }
-    )
-    for _, file_path in ipairs(lua_files) do
-      table.insert(library_files, file_path:linux())
+  -- find lua_ls client
+  local clients = vim.lsp.get_clients({ name = "lua_ls" })
+  if #clients == 0 then
+    print("⚠ Lua LSP (lua_ls) not found.")
+    return
+  end
+  local lua_client = clients[1]
+
+  -- compute project root
+  local root_dir = lua_client.config.root_dir or vim.fn.getcwd()
+  local luarcf = root_dir .. "/.luarc.json"
+
+  -- read existing .luarc.json if present
+  local current_settings = {}
+  local fd = io.open(luarcf, "r")
+  if fd then
+    local content = fd:read("*all")
+    fd:close()
+    local ok, decoded = pcall(vim.fn.json_decode, content)
+    if ok and type(decoded) == "table" then
+      current_settings = decoded
     end
   end
 
-  if #library_files == 0 then
-    print("No library files found to register with LSP")
-    return
+  -- ensure the workspace.library table exists
+  current_settings["workspace.library"] = current_settings["workspace.library"] or {}
+
+  -- merge new libraries
+  for _, lib in ipairs(libraries) do
+    local abs = vim.fn.fnamemodify(lib, ":p")
+    local already_exists = false
+    for _, existing in ipairs(current_settings["workspace.library"]) do
+      if existing == abs then
+        already_exists = true
+        break
+      end
+    end
+    if not already_exists then
+      table.insert(current_settings["workspace.library"], abs)
+    end
   end
 
-  table.insert(library_files, STANDARD_LIB_PATH)
-
-  -- Get the Lua LSP client
-  local clients = vim.lsp.get_clients({ name = "lua_ls" })
-  if #clients == 0 then
-    print("⚠ Lua LSP (lua_ls) not found. Make sure it's running.")
-    return
-  end
-
-  local lua_client = clients[1]
-
-  -- Method 1: Update workspace library paths in LSP settings
-  local current_settings = lua_client.config.settings or {}
-  if not current_settings.Lua then
-    current_settings.Lua = {}
-  end
-  if not current_settings.Lua.workspace then
-    current_settings.Lua.workspace = {}
-  end
-
-  -- Add library directories (not individual files)
-  local library_dirs = {}
-  for _, lib_path in ipairs(project_libs) do
-    table.insert(library_dirs, lib_path)
-  end
-
-  current_settings.Lua.workspace.library = library_dirs
-  current_settings.Lua.workspace.checkThirdParty = false
+  -- update running server
+  local settings_for_server = {
+    Lua = {
+      workspace = {
+        library = vim.tbl_map(function(p)
+          return true
+        end, current_settings["workspace.library"]),
+        checkThirdParty = current_settings["workspace.checkThirdParty"] or false,
+      },
+    },
+  }
 
   lua_client.rpc.request("workspace/didChangeConfiguration", {
-    settings = current_settings,
+    settings = settings_for_server,
   }, function(err, _)
     if err then
       print("✗ Failed to update LSP settings: " .. vim.inspect(err))
     else
-      print("✓ Updated LSP settings with " .. #current_settings .. " extracted globals")
+      print("✓ Lua LSP workspace.library updated")
     end
   end)
 
-  -- Explicitly tell LSP about each library file by "opening" them
-  print("📖 Force-loading library files into LSP...")
-  local loaded_count = 0
-
-  for _, file_path in ipairs(library_files) do
-    -- Read the file content
-    local file = io.open(file_path, "r")
-    if file then
-      local content = file:read("*all")
-      file:close()
-
-      -- Tell LSP about this file
-      lua_client.rpc.notify("textDocument/didOpen", {
-        textDocument = {
-          uri = vim.uri_from_fname(file_path),
-          languageId = "lua",
-          version = 1,
-          text = content,
-        },
-      })
-
-      loaded_count = loaded_count + 1
+  -- persist to .luarc.json if requested
+  if persist then
+    local ok, ferr = pcall(function()
+      local fd = io.open(luarcf, "w")
+      if not fd then
+        error("could not open " .. luarcf .. " for writing")
+      end
+      fd:write(vim.fn.json_encode(current_settings))
+      fd:close()
+    end)
+    if ok then
+      print("✓ Updated .luarc.json with new library paths")
+    else
+      print("✗ Failed to write .luarc.json: " .. tostring(ferr))
     end
   end
-
-  --reset the linter
-  vim.diagnostic.reset()
-
-  -- Give it a moment then refresh
-  vim.defer_fn(function()
-    vim.lsp.buf.format({ async = true })
-    print("✓ LSP diagnostics refresh complete")
-  end, 1000)
 end
 
 -- Function to setup libraries for the current project
@@ -266,7 +262,7 @@ function M.setup_project_libraries()
   end
 
   print("Microcontroller project setup complete. Libraries: " .. #project_libs)
-  M.register_libraries_with_lsp(project_libs)
+  M.register_libraries_with_lsp(project_libs, { persist = true })
 end
 
 -- Build function for microcontroller projects using LifeBoat API
@@ -491,18 +487,15 @@ function M.setup(user_config)
     })
   end
 
-  vim.api.nvim_create_autocmd("LspAttach", {
-    callback = function(args)
-      local client = vim.lsp.get_client_by_id(args.data.client_id)
-      local bufname = vim.api.nvim_buf_get_name(args.buf)
-
-      -- check if the file is inside your target directory
-      if bufname:match("_release") or bufname:match("_intermediate") then
-        assert(client, "No client!")
-        client:stop(false) -- stops the LSP for this buffer
-      end
-    end,
-  })
+  -- -- Auto-register libraries when lua_ls attaches
+  -- vim.api.nvim_create_autocmd("LspAttach", {
+  --   callback = function(args)
+  --     local client = vim.lsp.get_client_by_id(args.data.client_id)
+  --     if client and client.name == "lua_ls" then
+  --       M.setup_project_libraries()
+  --     end
+  --   end,
+  -- })
 
   print("Micro-project plugin loaded!")
 end
