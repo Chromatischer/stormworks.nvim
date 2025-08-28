@@ -31,3 +31,9 @@ Or:
 :MicroProject here
 ```
 If you are only interested in building the current file!
+
+
+TODO:
+- [ ] Multithreading
+- [ ] Compile Addon code
+
