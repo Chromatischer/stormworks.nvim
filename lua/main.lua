@@ -4,6 +4,12 @@
 require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.Base")
 require("sw-micro-project.lua.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.FileSystemUtils")
 
+local MT_AVAILABILITY = false
+
+if not MT_AVAILABILITY then
+  vim.notify("Multithread not available, proceeding single threaded", vim.log.levels.WARN)
+end
+
 local M = {}
 
 local function get_plugin_directory()
@@ -127,8 +133,6 @@ function M.register_libraries_with_lsp(libraries)
       { ["_release"] = 1, ["_intermediate"] = 1 },
       { ["lua"] = 1 }
     )
-    print("In path: " .. lib_path .. " found: " .. #lua_files .. " files")
-    vim.notify("Path: " .. lib_path .. " found: " .. #lua_files .. " files")
     for _, file_path in ipairs(lua_files) do
       table.insert(library_files, file_path:linux())
     end
@@ -207,10 +211,10 @@ function M.register_libraries_with_lsp(libraries)
   vim.diagnostic.reset()
 
   -- Give it a moment then refresh
-  -- vim.defer_fn(function()
-  --   vim.lsp.buf.format({ async = false })
-  --   print("✓ LSP diagnostics refresh complete")
-  -- end, 1000)
+  vim.defer_fn(function()
+    vim.lsp.buf.format({ async = true })
+    print("✓ LSP diagnostics refresh complete")
+  end, 1000)
 end
 
 -- Function to setup libraries for the current project
@@ -304,7 +308,31 @@ function M.build_micro_project(single_file)
       { ["lua"] = 1, ["luah"] = 1 }
     )
 
-  -- Build each Lua file
+  --TODO: Multithread this task!
+
+  if MT_AVAILABILITY then
+    local mt_build = lanes.gen(function(build_method, builder, relative_path, build_params)
+      local originalText, combinedText, finalText, outFile = builder[build_method](
+        builder,
+        relative_path,
+        LifeBoatAPI.Tools.Filepath:new(current_project.path .. relative_path),
+        build_params
+      )
+      LifeBoatAPI.Tools.FileSystemUtils.writeAllText(outFile, finalText)
+      return originalText, combinedText, finalText, outFile
+    end)
+
+    local THREADCOUNT = 4
+    local latest_compile = 0
+
+    for _, filepath in ipairs(lua_files) do
+      local relative_path = single_file and filepath:linux()
+        or filepath:linux():gsub(tostring(current_project.path), "")
+      local build_method = is_microcontroller and "buildMicrocontroller" or "buildAddonScript"
+    end
+  end
+
+  -- Build each Lua file (Singlethread)
   for _, file_path in ipairs(lua_files) do
     --print(not single_file and ("Compiling multi: " .. tostring(file_path:linux()) .. "!") or "")
     local relative_path = single_file and file_path:linux()
@@ -442,12 +470,21 @@ function M.setup(user_config)
     end,
   })
 
+  local aug = vim.api.nvim_create_augroup("MyLspFirstAttach", {})
+
   -- Auto-detect projects when entering directories
   if M.config.auto_detect then
-    vim.api.nvim_create_autocmd({ "DirChanged", "VimEnter" }, {
+    --TODO: Fix autocmd not firering at the correct time!
+    --This autocmd should fire after the LSP has initialized for the first time for this project
+    vim.api.nvim_create_autocmd({ "LspAttach" }, {
+      group = aug,
+      once = true,
       callback = function()
+        vim.notify("Ms")
+        print("Executing autocmd")
         local marker_path = detect_micro_project()
         if marker_path then
+          print("Marker found!")
           M.setup_project_libraries()
         end
       end,
@@ -461,7 +498,8 @@ function M.setup(user_config)
 
       -- check if the file is inside your target directory
       if bufname:match("_release") or bufname:match("_intermediate") then
-        client.stop() -- stops the LSP for this buffer
+        assert(client, "No client!")
+        client:stop(false) -- stops the LSP for this buffer
       end
     end,
   })
