@@ -20,7 +20,7 @@ local function get_plugin_directory()
 end
 
 -- Hardcoded standard library path (relative to plugin directory)
-local STANDARD_LIB_PATH = get_plugin_directory() .. "common/nameouschangey/Microcontroller/microcontroller.lua"
+local STANDARD_LIB_PATH = get_plugin_directory() .. "../common/nameouschangey/MicroController/microcontroller.lua"
 
 -- Build function for microcontroller projects using LifeBoat API
 function M.build_micro_project(single_file)
