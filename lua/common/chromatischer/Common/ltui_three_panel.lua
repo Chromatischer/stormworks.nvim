@@ -10,6 +10,7 @@ local window = ltui.window
 local button = ltui.button
 local textarea = ltui.textarea
 local label = ltui.label
+local event = ltui.event
 local drawable = ltui.drawable.canvas
 
 -- build a rect from x,y and width,height (maps to inclusive x2,y2)
@@ -86,19 +87,6 @@ function app:init()
   self:insert(right_win)
   self:insert(center_win)
 
-  -- Canvas inside center window
-  local canvas_inner_rect = rwh(Cx1 + 1, Cy1 + 1, side - 2, side - 2)
-  local main_canvas = drawable:new("canvas.main", canvas_inner_rect, "")
-  self:insert(main_canvas)
-
-  -- Draw some lines for testing
-  main_canvas:draw_line(1, 1, side - 2, 1) -- horizontal top
-  -- main_canvas:draw_line(1, side - 2, side - 2, side - 2) -- horizontal bottom
-  -- main_canvas:draw_line(1, 1, 1, side - 2) -- vertical left
-  -- main_canvas:draw_line(side - 2, 1, side - 2, side - 2) -- vertical right
-  -- main_canvas:draw_line(1, 1, side - 2, side - 2) -- diagonal top-left to bottom-right
-  -- main_canvas:draw_line(1, side - 2, side - 2, 1) -- diagonal bottom-left to top-right
-
   -- Left: output area inside left window (-2 to avoid overhang)
   local left_inner_w = (Lx2 - Lx1) - 2
   local left_inner_h = (Y2 - Y1) - 2
@@ -157,7 +145,20 @@ function app:init()
     end
   end
 
-  log(string.format("Layout: W=%d H=%d | L=%d, C=%d, R=%d | TH=%d side=%d", TW, TH, left_w, side, right_w, TH, side))
+  log(
+    string.format(
+      "Layout: W=%d H=%d | L=%d, C=%d, R=%d | TH=%d side=%d | Cx=%d,%d",
+      TW,
+      TH,
+      left_w,
+      center_w,
+      right_w,
+      TH,
+      side,
+      Cx1,
+      Cx2
+    )
+  )
   log("App started. Ready.")
 end
 
