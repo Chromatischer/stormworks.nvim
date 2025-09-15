@@ -6,6 +6,8 @@ local project = require("sw-micro-project.lua.modules.project")
 local library = require("sw-micro-project.lua.modules.library")
 local build = require("sw-micro-project.lua.modules.build")
 local commands = require("sw-micro-project.lua.modules.commands")
+local love_runner = require("sw-micro-project.lua.modules.love_runner")
+local keys = require("sw-micro-project.lua.modules.keys")
 
 local M = {}
 
@@ -20,6 +22,8 @@ M.register_libraries_with_lsp = library.register_libraries_with_lsp
 M.build_micro_project = build.build_micro_project
 M.create_commands = commands.create_commands
 M.setup_autodetection = commands.setup_autodetection
+M.run_love_ui = love_runner.run_current_script
+M.register_keymaps = keys.register_keymaps
 
 -- Setup function called by user in their config
 function M.setup(user_config)
@@ -31,6 +35,9 @@ function M.setup(user_config)
 
   -- Setup autodetection
   commands.setup_autodetection()
+
+  -- Register default keymaps and which-key group if available
+  keys.register_keymaps()
 end
 
 return M
