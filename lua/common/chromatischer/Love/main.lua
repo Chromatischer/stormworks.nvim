@@ -1,9 +1,9 @@
+-- Main entry point for the Stormworks Microcontroller Debugger (LÖVE)
 local state = require('lib.state')
 local ui = require('lib.ui')
 local canvases = require('lib.canvases')
 local logger = require('lib.logger')
 local sandbox = require('lib.sandbox')
-local storm = require('lib.storm_api')
 local hot = require('lib.hotreload')
 local detach = require('lib.detach')
 
@@ -176,7 +176,7 @@ function love.draw()
   canvases.ensure()
   if not ui.minimized.game then
     -- Render to game canvas by calling user onDraw
-    canvas_prev = love.graphics.getCanvas()
+    local canvas_prev = love.graphics.getCanvas()
     love.graphics.setCanvas()
     love.graphics.setColor(1,1,1,1)
     -- Draw game canvas content
@@ -203,7 +203,7 @@ function love.draw()
   if state.debugCanvasEnabled and not detach.is_enabled('debug') then
     local dbgPanel = ui.draw_debug_canvas_center()
     if not ui.minimized.debug then
-      canvas_prev = love.graphics.getCanvas()
+      local canvas_prev = love.graphics.getCanvas()
       love.graphics.setCanvas()
       canvases.withTarget('debug', function(api)
         api.clear(0,0,0,255)
@@ -231,7 +231,7 @@ function love.draw()
     love.graphics.print('ERROR: '..tostring(state.lastError), 16, 48)
   end
 
-  -- After drawing canvases, update detached frame writers
+  -- Update detached frame writers after rendering
   detach.update()
 end
 

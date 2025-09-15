@@ -13,6 +13,23 @@ M.config = {
   project_markers = { ".microproject" },
   -- Auto-detect projects on startup
   auto_detect = true,
+  -- Enable default keymaps and which-key registration
+  enable_keymaps = true,
+  -- Prefix for keymaps and which-key group
+  which_key_prefix = "<leader>S",
+  -- Per-action key assignments (override via opts.keymaps)
+  keymaps = {
+    mark = "m",
+    setup = "s",
+    build = "b",
+    here = "h",
+    ui = "u",
+    add = "a",
+  },
+  -- Command to launch LÖVE2D. If not found on PATH, macOS fallback is tried.
+  love_command = "love",
+  -- macOS fallback path for LÖVE2D
+  love_macos_path = "/Applications/love.app/Contents/MacOS/love",
 }
 
 -- Internal state
