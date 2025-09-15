@@ -20,10 +20,10 @@ M.config = {
   -- Per-action key assignments (override via opts.keymaps)
   keymaps = {
     mark = "m",
-    setup = "s",
+    setup = "l",
     build = "b",
     here = "h",
-    ui = "u",
+    ui = "r",
     add = "a",
   },
   -- Command to launch LÖVE2D. If not found on PATH, macOS fallback is tried.
