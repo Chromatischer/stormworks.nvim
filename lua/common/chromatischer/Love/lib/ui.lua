@@ -212,7 +212,7 @@ local function draw_nav_bar(p, title, which)
 
       -- Minimize button (left of detach)
       bx = bx - spacing - btnSize
-      local min_key = (which == 'game') and 'game' or 'debug'
+      local min_key = (which == 'game') and 'game' or ((which == 'debug') and 'debug' or which)
       local is_min = ui.minimized[min_key]
       local is_hover_min = (mx >= bx and my >= by and mx <= bx+btnSize and my <= by+btnSize)
       love.graphics.setColor(is_hover_min and {0.28,0.28,0.34,1} or {0.22,0.22,0.26,1})
@@ -230,7 +230,7 @@ local function draw_nav_bar(p, title, which)
         love.graphics.setColor(1,1,1,0.95)
         love.graphics.rectangle('fill', bx+4, by+btnSize/2-1, btnSize-8, 2)
       end
-      local tip = is_min and ('Show '..title) or ('Hide '..title)
+      local tip = is_min and ('Show '..(title or which or '')) or ('Hide '..(title or which or ''))
       ui._navRects[which..'_min'] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_min', which=min_key, tooltip=tip}
       if is_hover_min then set_tooltip(tip) end
     end
@@ -242,7 +242,7 @@ local function draw_nav_bar(p, title, which)
     local by = p.y + math.floor((NAV_H - btnSize)/2)
     local bx = p.x + p.w - (btnSize + 6)
     local mx,my = love.mouse.getPosition()
-    local key = (which == 'left') and 'inputs' or (which == 'outputs' and 'outputs' or (which == 'log' and 'log' or (which == 'inputs' and 'inputs' or nil)))
+    local key = (which == 'left') and 'inputs' or (which == 'outputs' and 'outputs' or (which == 'log' and 'log' or (which == 'inputs' and 'inputs' or which)))
     if key then
       local is_min = ui.minimized[key]
       local is_hover = (mx >= bx and my >= by and mx <= bx+btnSize and my <= by+btnSize)

@@ -174,48 +174,52 @@ function love.draw()
   -- Game canvas draw
   local gamePanel = ui.draw_game_canvas()
   canvases.ensure()
-  -- Render to game canvas by calling user onDraw
-  canvas_prev = love.graphics.getCanvas()
-  love.graphics.setCanvas()
-  love.graphics.setColor(1,1,1,1)
-  -- Draw game canvas content
-  canvases.withTarget('game', function(api)
-    api.clear(0,0,0,255)
-    -- Provide screen.* API during onDraw
-    if sandbox.env and type(sandbox.env.onDraw) == 'function' then
-      local ok, err = xpcall(sandbox.env.onDraw, debug.traceback)
-      if not ok then
-        logger.append('[error] onDraw: '..tostring(err))
-        state.lastError = err
-        if state.pauseOnError then state.running = false end
-      end
-    end
-  end)
-  love.graphics.setCanvas(canvas_prev)
-  love.graphics.push()
-  love.graphics.translate(gamePanel.x, gamePanel.y)
-  canvases.drawToScreen({x=0,y=0}, 'game')
-  love.graphics.pop()
-
-  -- Debug canvas
-  if state.debugCanvasEnabled and not detach.is_enabled('debug') then
-    local dbgPanel = ui.draw_debug_canvas_center()
+  if not ui.minimized.game then
+    -- Render to game canvas by calling user onDraw
     canvas_prev = love.graphics.getCanvas()
     love.graphics.setCanvas()
-    canvases.withTarget('debug', function(api)
+    love.graphics.setColor(1,1,1,1)
+    -- Draw game canvas content
+    canvases.withTarget('game', function(api)
       api.clear(0,0,0,255)
-      if sandbox.env and type(sandbox.env.onDebugDraw) == 'function' then
-        local ok, err = xpcall(sandbox.env.onDebugDraw, debug.traceback)
+      -- Provide screen.* API during onDraw
+      if sandbox.env and type(sandbox.env.onDraw) == 'function' then
+        local ok, err = xpcall(sandbox.env.onDraw, debug.traceback)
         if not ok then
-          logger.append('[error] onDebugDraw: '..tostring(err))
+          logger.append('[error] onDraw: '..tostring(err))
+          state.lastError = err
+          if state.pauseOnError then state.running = false end
         end
       end
     end)
     love.graphics.setCanvas(canvas_prev)
-    if dbgPanel and dbgPanel.x then
-      love.graphics.push(); love.graphics.translate(dbgPanel.x, dbgPanel.y)
-      canvases.drawToScreen({x=0,y=0}, 'debug')
-      love.graphics.pop()
+    love.graphics.push()
+    love.graphics.translate(gamePanel.x, gamePanel.y)
+    canvases.drawToScreen({x=0,y=0}, 'game')
+    love.graphics.pop()
+  end
+
+  -- Debug canvas
+  if state.debugCanvasEnabled and not detach.is_enabled('debug') then
+    local dbgPanel = ui.draw_debug_canvas_center()
+    if not ui.minimized.debug then
+      canvas_prev = love.graphics.getCanvas()
+      love.graphics.setCanvas()
+      canvases.withTarget('debug', function(api)
+        api.clear(0,0,0,255)
+        if sandbox.env and type(sandbox.env.onDebugDraw) == 'function' then
+          local ok, err = xpcall(sandbox.env.onDebugDraw, debug.traceback)
+          if not ok then
+            logger.append('[error] onDebugDraw: '..tostring(err))
+          end
+        end
+      end)
+      love.graphics.setCanvas(canvas_prev)
+      if dbgPanel and dbgPanel.x then
+        love.graphics.push(); love.graphics.translate(dbgPanel.x, dbgPanel.y)
+        canvases.drawToScreen({x=0,y=0}, 'debug')
+        love.graphics.pop()
+      end
     end
   end
 
