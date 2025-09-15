@@ -242,7 +242,7 @@ local function draw_nav_bar(p, title, which)
     local by = p.y + math.floor((NAV_H - btnSize)/2)
     local bx = p.x + p.w - (btnSize + 6)
     local mx,my = love.mouse.getPosition()
-    local key = (which == 'left') and 'inputs' or (which == 'outputs' and 'outputs' or (which == 'log' and 'log' or nil))
+    local key = (which == 'left') and 'inputs' or (which == 'outputs' and 'outputs' or (which == 'log' and 'log' or (which == 'inputs' and 'inputs' or nil)))
     if key then
       local is_min = ui.minimized[key]
       local is_hover = (mx >= bx and my >= by and mx <= bx+btnSize and my <= by+btnSize)
@@ -593,7 +593,7 @@ function ui.draw_inputs()
   if ui.mergedOutputs then
     draw_nav_bar(p, '', 'left')
   else
-    draw_nav_bar(p, "Inputs", nil)
+    draw_nav_bar(p, "Inputs", 'inputs')
   end
   panel_content_scissor(p)
 
