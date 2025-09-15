@@ -128,10 +128,10 @@ With lazy.nvim, configure via `opts` (no manual `setup` call needed). Defaults a
   which_key_prefix = "<leader>S",
   keymaps = {
     mark = "m",   -- :MicroProject mark
-    setup = "s",  -- :MicroProject setup
+    setup = "l",  -- :MicroProject setup (libraries)
     build = "b",  -- :MicroProject build
     here  = "h",  -- :MicroProject here
-    ui    = "u",  -- :MicroProject ui
+    ui    = "r",  -- :MicroProject ui (run with LÖVE)
     add   = "a",  -- :MicroProject add
   },
 
@@ -152,10 +152,10 @@ Notes:
 If enabled, the following default mappings are provided under `<leader>S`:
 
 - `<leader>Sm` → :MicroProject mark
-- `<leader>Ss` → :MicroProject setup
+- `<leader>Sl` → :MicroProject setup
 - `<leader>Sb` → :MicroProject build
 - `<leader>Sh` → :MicroProject here
-- `<leader>Su` → :MicroProject ui
+- `<leader>Sr` → :MicroProject ui (run with LÖVE)
 - `<leader>Sa` → prompt to add a library path
 
 If you use which-key, a "MicroProject" group will be registered automatically.

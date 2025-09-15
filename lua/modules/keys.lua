@@ -30,7 +30,7 @@ function M.register_keymaps()
   if km.setup ~= false and km.setup then
     nmap(prefix .. km.setup, function()
       vim.cmd("MicroProject setup")
-    end, "MicroProject: Setup libs")
+    end, "MicroProject: Setup libraries")
   end
 
   if km.build ~= false and km.build then
@@ -48,7 +48,7 @@ function M.register_keymaps()
   if km.ui ~= false and km.ui then
     nmap(prefix .. km.ui, function()
       vim.cmd("MicroProject ui")
-    end, "MicroProject: Run LÖVE UI")
+    end, "MicroProject: Run with LÖVE")
   end
 
   if km.add ~= false and km.add then
@@ -70,8 +70,8 @@ function M.register_keymaps()
     if km.build ~= false and km.build then table.insert(spec, { prefix .. km.build, desc = "Build project" }) end
     if km.here ~= false and km.here then table.insert(spec, { prefix .. km.here, desc = "Build current file" }) end
     if km.mark ~= false and km.mark then table.insert(spec, { prefix .. km.mark, desc = "Mark project" }) end
-    if km.setup ~= false and km.setup then table.insert(spec, { prefix .. km.setup, desc = "Setup libs" }) end
-    if km.ui ~= false and km.ui then table.insert(spec, { prefix .. km.ui, desc = "Run LÖVE UI" }) end
+    if km.setup ~= false and km.setup then table.insert(spec, { prefix .. km.setup, desc = "Setup libraries" }) end
+    if km.ui ~= false and km.ui then table.insert(spec, { prefix .. km.ui, desc = "Run with LÖVE" }) end
 
     -- Prefer which-key v3 API (add); fallback to v2 (register)
     if type(wk.add) == "function" then
@@ -82,8 +82,8 @@ function M.register_keymaps()
       if km.build ~= false and km.build then group[km.build] = "Build project" end
       if km.here ~= false and km.here then group[km.here] = "Build current file" end
       if km.mark ~= false and km.mark then group[km.mark] = "Mark project" end
-      if km.setup ~= false and km.setup then group[km.setup] = "Setup libs" end
-      if km.ui ~= false and km.ui then group[km.ui] = "Run LÖVE UI" end
+      if km.setup ~= false and km.setup then group[km.setup] = "Setup libraries" end
+      if km.ui ~= false and km.ui then group[km.ui] = "Run with LÖVE" end
       wk.register({ [prefix] = group })
     end
   end
