@@ -55,6 +55,14 @@ ui._activeSlider = nil
 ui._navRects = {}
 ui._toolbarRects = {}
 ui.leftTab = 'inputs' -- for merged mode (Inputs | Outputs)
+ui._hoverTip = nil
+ui.minimized = { inputs = false, outputs = false, game = false, debug = false, log = false }
+
+local function set_tooltip(text)
+  if not text or text == '' then return end
+  local mx,my = love.mouse.getPosition()
+  ui._hoverTip = { text = text, x = mx + 14, y = my + 18 }
+end
 
 local function draw_panel(p)
   love.graphics.setColor(ui.color.panel)
@@ -154,11 +162,14 @@ local function draw_nav_bar(p, title, which)
     love.graphics.setColor(ui.color.text)
     love.graphics.print(title or '', p.x+8, p.y+5)
 
-    -- Right-side detach button (improved glyph + hover state)
+    -- Right-side buttons
     if which == 'game' or which == 'debug' then
       local btnSize = 18
-      local bx = p.x + p.w - (btnSize + 6)
+      local spacing = 4
       local by = p.y + math.floor((NAV_H - btnSize)/2)
+      local right = p.x + p.w - 6
+      -- Detach button (rightmost)
+      local bx = right - btnSize
       local is_det = detach.is_enabled(which)
 
       -- Hover detection
@@ -194,7 +205,66 @@ local function draw_nav_bar(p, title, which)
         end
       end
 
-      ui._navRects[which] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_detach', which=which}
+      ui._navRects[which] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_detach', which=which, tooltip = is_det and 'Attach back to main window' or 'Detach into separate window'}
+      if is_hover then set_tooltip(ui._navRects[which].tooltip) end
+
+      -- Minimize button (left of detach)
+      bx = bx - spacing - btnSize
+      local min_key = (which == 'game') and 'game' or 'debug'
+      local is_min = ui.minimized[min_key]
+      local is_hover_min = (mx >= bx and my >= by and mx <= bx+btnSize and my <= by+btnSize)
+      love.graphics.setColor(is_hover_min and {0.28,0.28,0.34,1} or {0.22,0.22,0.26,1})
+      love.graphics.rectangle('fill', bx, by, btnSize, btnSize, 4,4)
+      love.graphics.setColor(0,0,0,0.35)
+      love.graphics.rectangle('line', bx+0.5, by+0.5, btnSize-1, btnSize-1, 4,4)
+      local minImg = load_icon(is_min and 'add' or 'remove')
+      local iw, ih = 24,24
+      if minImg and minImg ~= false then iw,ih = minImg:getDimensions() end
+      local scale = (btnSize - pad*2) / math.max(iw, ih)
+      love.graphics.setColor(1,1,1, is_hover_min and 1 or 0.95)
+      if minImg and minImg ~= false then
+        love.graphics.draw(minImg, bx+pad, by+pad, 0, scale, scale)
+      else
+        love.graphics.setColor(1,1,1,0.95)
+        love.graphics.rectangle('fill', bx+4, by+btnSize/2-1, btnSize-8, 2)
+      end
+      local tip = is_min and ('Show '..title) or ('Hide '..title)
+      ui._navRects[which..'_min'] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_min', which=min_key, tooltip=tip}
+      if is_hover_min then set_tooltip(tip) end
+    end
+  end
+
+  -- Minimize button for non-game/debug panels (left tabs, outputs, log)
+  if which ~= 'game' and which ~= 'debug' then
+    local btnSize = 18
+    local by = p.y + math.floor((NAV_H - btnSize)/2)
+    local bx = p.x + p.w - (btnSize + 6)
+    local mx,my = love.mouse.getPosition()
+    local key = (which == 'left') and 'inputs' or (which == 'outputs' and 'outputs' or (which == 'log' and 'log' or nil))
+    if key then
+      local is_min = ui.minimized[key]
+      local is_hover = (mx >= bx and my >= by and mx <= bx+btnSize and my <= by+btnSize)
+      love.graphics.setColor(is_hover and {0.28,0.28,0.34,1} or {0.22,0.22,0.26,1})
+      love.graphics.rectangle('fill', bx, by, btnSize, btnSize, 4,4)
+      love.graphics.setColor(0,0,0,0.35)
+      love.graphics.rectangle('line', bx+0.5, by+0.5, btnSize-1, btnSize-1, 4,4)
+      local pad = 3
+      local img = load_icon(is_min and 'add' or 'remove')
+      if img and img ~= false then
+        local iw, ih = img:getDimensions()
+        local target = btnSize - pad*2
+        local scale = math.min(target/iw, target/ih)
+        local ox = (target - iw*scale)/2
+        local oy = (target - ih*scale)/2
+        love.graphics.setColor(1,1,1, is_hover and 1 or 0.95)
+        love.graphics.draw(img, bx+pad+ox, by+pad+oy, 0, scale, scale)
+      else
+        love.graphics.setColor(1,1,1,0.95)
+        love.graphics.rectangle('fill', bx+4, by+btnSize/2-1, btnSize-8, 2)
+      end
+      local tip = is_min and 'Show panel' or 'Hide panel'
+      ui._navRects[(which..'_min')] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_min', which=key, tooltip=tip}
+      if is_hover then set_tooltip(tip) end
     end
   end
 end
@@ -322,17 +392,18 @@ end
 function ui.layout(w,h)
   ui.panels.toolbar = {x=8,y=8,w=w-16,h=28}
 
-  -- Bottom section: log at bottom
-  local logH = math.min(140, math.floor(h * 0.18))
-  ui.panels.log = {x=8, y=h - logH - 8, w=w-16, h=logH}
+  -- Bottom section: log at bottom (hide if minimized)
+  local logH_full = math.min(140, math.floor(h * 0.18))
+  local logH = ui.minimized.log and 0 or logH_full
+  ui.panels.log = {x=8, y=h - (logH > 0 and (logH + 8) or 8), w=w-16, h=logH}
 
   -- Middle row: inputs (left), game (center), outputs (right)
   local midTop = ui.panels.toolbar.y + ui.panels.toolbar.h + 8
   local midBottom = ui.panels.log.y - 8
   local midH = midBottom - midTop
 
-  local leftW = 320
-  local rightW = 320
+  local leftW = ui.minimized.inputs and 0 or 320
+  local rightW = ui.mergedOutputs and 0 or (ui.minimized.outputs and 0 or 320)
   local gameWpx = state.tilesX*state.tileSize*state.gameCanvasScale
   local gameHpx = state.tilesY*state.tileSize*state.gameCanvasScale
   local dbgWpx = state.debugCanvasEnabled and (state.debugCanvasW*state.debugCanvasScale) or 0
@@ -352,15 +423,24 @@ function ui.layout(w,h)
   centerW = math.min(centerW, availableCenterW)
 
   ui.panels.io_inputs = {x=8, y=midTop, w=leftW, h=midH}
-  ui.panels.game = {x=ui.panels.io_inputs.x + leftW + 8, y=midTop, w=centerW, h=math.min(midH, gameHpx + 16 + NAV_H)}
-  local debugY = ui.panels.game.y + ui.panels.game.h + (state.debugCanvasEnabled and 8 or 0)
-  local debugH = state.debugCanvasEnabled and (dbgHpx + 16 + NAV_H) or 0
-  ui.panels.debug_center = {x=ui.panels.game.x, y=debugY, w=centerW, h=debugH}
+  -- Center stacking: Game first if not minimized; Debug below if enabled and not minimized
+  local centerX = ui.panels.io_inputs.x + leftW + (leftW>0 and 8 or 0)
+  local nextY = midTop
+  local gameH = (ui.minimized.game and 0) or math.min(midH, gameHpx + 16 + NAV_H)
+  local debugH = (state.debugCanvasEnabled and not ui.minimized.debug) and (dbgHpx + 16 + NAV_H) or 0
+  -- If game minimized, let debug take the space from top
+  if ui.minimized.game then
+    gameH = 0
+  end
+  ui.panels.game = {x=centerX, y=nextY, w=centerW, h=gameH}
+  nextY = nextY + (gameH > 0 and (gameH + (debugH>0 and 8 or 0)) or 0)
+  ui.panels.debug_center = {x=centerX, y=nextY, w=centerW, h=debugH}
   if ui.mergedOutputs then
     -- Outputs handled inside left panel via tabs; skip right panel sizing
     ui.panels.io_outputs = {x=ui.panels.io_inputs.x, y=ui.panels.io_inputs.y, w=leftW, h=midH}
   else
-    ui.panels.io_outputs = {x=ui.panels.game.x + centerW + 8, y=midTop, w=rightW, h=midH}
+    local outX = centerX + centerW + (centerW>0 and 8 or 0)
+    ui.panels.io_outputs = {x=outX, y=midTop, w=rightW, h=midH}
   end
 end
 
@@ -368,6 +448,7 @@ function ui.draw_toolbar()
   local p = ui.panels.toolbar
   draw_panel(p)
   ui._toolbarRects = {}
+  ui._hoverTip = nil
   local x = p.x + 8
   local y = p.y + math.floor((p.h - 22)/2)
 
@@ -424,6 +505,7 @@ end
 -- Inputs panel: with optional tabbed merge for Outputs
 function ui.draw_inputs()
   local p = ui.panels.io_inputs
+  if p.w <= 0 or p.h <= 0 then return end
   draw_panel(p)
   if ui.mergedOutputs then
     draw_nav_bar(p, '', 'left')
@@ -445,8 +527,9 @@ end
 function ui.draw_outputs()
   if ui.mergedOutputs then return end
   local p = ui.panels.io_outputs
+  if p.w <= 0 or p.h <= 0 then return end
   draw_panel(p)
-  draw_nav_bar(p, "Outputs", nil)
+  draw_nav_bar(p, "Outputs", 'outputs')
   panel_content_scissor(p)
   draw_outputs_content(p)
   love.graphics.setScissor()
@@ -454,6 +537,7 @@ end
 
 function ui.draw_game_canvas()
   local p = ui.panels.game
+  if p.w <= 0 or p.h <= 0 then return {x=p.x+8, y=p.y+NAV_H+8} end
   draw_panel(p)
   draw_nav_bar(p, "Game", 'game')
   -- inner rect where canvas is drawn
@@ -464,6 +548,7 @@ end
 
 function ui.draw_debug_canvas_center()
   local p = ui.panels.debug_center
+  if p.w <= 0 or p.h <= 0 then return {x=p.x+8, y=p.y+NAV_H+8} end
   draw_panel(p)
   draw_nav_bar(p, "Debug", 'debug')
   local cx = p.x+8
@@ -473,19 +558,42 @@ end
 
 function ui.draw_log(logger)
   local p = ui.panels.log
-  draw_panel(p)
-  draw_nav_bar(p, "Log", nil)
-  local lines = logger.getLines(200)
-  love.graphics.setScissor(p.x, p.y+NAV_H, p.w, p.h-NAV_H)
-  local y = p.y + NAV_H + 4
-  local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
-  for i = math.max(1, #lines-8*6), #lines do
-    love.graphics.setColor(ui.color.text)
-    love.graphics.print(lines[i], p.x+8, y)
-    y = y + fontH
-    if y > p.y + p.h - fontH then break end
+  if p.h > 0 then
+    draw_panel(p)
+    draw_nav_bar(p, "Log", 'log')
+    local lines = logger.getLines(200)
+    love.graphics.setScissor(p.x, p.y+NAV_H, p.w, p.h-NAV_H)
+    local y = p.y + NAV_H + 4
+    local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
+    for i = math.max(1, #lines-8*6), #lines do
+      love.graphics.setColor(ui.color.text)
+      love.graphics.print(lines[i], p.x+8, y)
+      y = y + fontH
+      if y > p.y + p.h - fontH then break end
+    end
+    love.graphics.setScissor()
   end
-  love.graphics.setScissor()
+
+  -- Draw tooltip overlay if any
+  if ui._hoverTip and ui._hoverTip.text then
+    local padx, pady = 8, 6
+    local text = ui._hoverTip.text
+    local font = love.graphics.getFont()
+    local tw = font:getWidth(text)
+    local th = font:getHeight()
+    local x = ui._hoverTip.x
+    local y = ui._hoverTip.y
+    -- keep on screen
+    local ww, wh = love.graphics.getWidth(), love.graphics.getHeight()
+    if x + tw + padx*2 > ww - 8 then x = ww - (tw + padx*2) - 8 end
+    if y + th + pady*2 > wh - 8 then y = wh - (th + pady*2) - 8 end
+    love.graphics.setColor(0,0,0,0.8)
+    love.graphics.rectangle('fill', x, y, tw + padx*2, th + pady*2, 4,4)
+    love.graphics.setColor(1,1,1,0.15)
+    love.graphics.rectangle('line', x+0.5, y+0.5, tw + padx*2-1, th + pady*2-1, 4,4)
+    love.graphics.setColor(1,1,1,1)
+    love.graphics.print(text, x + padx, y + pady)
+  end
 end
 
 function ui.mousepressed(mx,my,button)
@@ -517,6 +625,9 @@ function ui.mousepressed(mx,my,button)
         if r.action == 'toggle_detach' and r.which then
           local detach_mod = require('lib.detach')
           detach_mod.toggle(r.which)
+          return
+        elseif r.action == 'toggle_min' and r.which then
+          ui.minimized[r.which] = not ui.minimized[r.which]
           return
         elseif r.action == 'left_tab' and r.tab then
           ui.leftTab = r.tab
