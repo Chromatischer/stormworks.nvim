@@ -75,6 +75,8 @@ local function text(x,y, s)
 end
 
 local NAV_H = 24
+local COLLAPSE_W = 28   -- width for collapsed side panels
+local COLLAPSE_H = 22   -- height for collapsed top/bottom/stack panels
 
 -- Small toggle knob used by Inputs UI
 local function draw_bool_toggle(x,y,val)
@@ -273,6 +275,81 @@ local function panel_content_scissor(p)
   love.graphics.setScissor(p.x, p.y+NAV_H, p.w, p.h-NAV_H)
 end
 
+-- Collapsed placeholders ------------------------------------------------------
+local function draw_collapsed_vertical(p, which, title)
+  -- Slim vertical bar with a (+) to restore
+  local w = math.max(1, p.w)
+  local h = math.max(1, p.h)
+  love.graphics.setColor(0.16,0.16,0.18,1)
+  love.graphics.rectangle('fill', p.x, p.y, w, h, 4,4)
+  love.graphics.setColor(1,1,1,0.08)
+  love.graphics.rectangle('line', p.x+0.5, p.y+0.5, w-1, h-1, 4,4)
+  local btn = { x = p.x + math.floor((w-18)/2), y = p.y + math.floor((h-18)/2), w = 18, h = 18 }
+  local mx,my = love.mouse.getPosition()
+  local is_hover = (mx >= btn.x and my >= btn.y and mx <= btn.x+btn.w and my <= btn.y+btn.h)
+  love.graphics.setColor(is_hover and {0.28,0.28,0.34,1} or {0.22,0.22,0.26,1})
+  love.graphics.rectangle('fill', btn.x, btn.y, btn.w, btn.h, 4,4)
+  love.graphics.setColor(0,0,0,0.35)
+  love.graphics.rectangle('line', btn.x+0.5, btn.y+0.5, btn.w-1, btn.h-1, 4,4)
+  local img = load_icon('add')
+  if img and img ~= false then
+    local iw, ih = img:getDimensions()
+    local pad = 3
+    local target = btn.w - pad*2
+    local scale = math.min(target/iw, target/ih)
+    local ox = (target - iw*scale)/2
+    local oy = (target - ih*scale)/2
+    love.graphics.setColor(1,1,1, is_hover and 1 or 0.95)
+    love.graphics.draw(img, btn.x+pad+ox, btn.y+pad+oy, 0, scale, scale)
+  else
+    love.graphics.setColor(1,1,1,0.95)
+    love.graphics.rectangle('fill', btn.x+4, btn.y+btn.h/2-1, btn.w-8, 2)
+    love.graphics.rectangle('fill', btn.x+btn.w/2-1, btn.y+4, 2, btn.h-8)
+  end
+  local tip = 'Show '..(title or which or '')
+  ui._navRects[which..'_collapsed'] = {x=btn.x, y=btn.y, w=btn.w, h=btn.h, action='toggle_min', which=which, tooltip=tip}
+  if is_hover then set_tooltip(tip) end
+end
+
+local function draw_collapsed_horizontal(p, which, title)
+  -- Slim horizontal bar with a (+) to restore and title text
+  local w = math.max(1, p.w)
+  local h = math.max(COLLAPSE_H, p.h)
+  love.graphics.setColor(0.16,0.16,0.18,1)
+  love.graphics.rectangle('fill', p.x, p.y, w, h, 4,4)
+  love.graphics.setColor(1,1,1,0.08)
+  love.graphics.rectangle('line', p.x+0.5, p.y+0.5, w-1, h-1, 4,4)
+  -- Title
+  love.graphics.setColor(ui.color.text)
+  love.graphics.print(title or '', p.x+8, p.y+5)
+  -- Button on right
+  local btn = { x = p.x + w - 6 - 18, y = p.y + math.floor((h-18)/2), w = 18, h = 18 }
+  local mx,my = love.mouse.getPosition()
+  local is_hover = (mx >= btn.x and my >= btn.y and mx <= btn.x+btn.w and my <= btn.y+btn.h)
+  love.graphics.setColor(is_hover and {0.28,0.28,0.34,1} or {0.22,0.22,0.26,1})
+  love.graphics.rectangle('fill', btn.x, btn.y, btn.w, btn.h, 4,4)
+  love.graphics.setColor(0,0,0,0.35)
+  love.graphics.rectangle('line', btn.x+0.5, btn.y+0.5, btn.w-1, btn.h-1, 4,4)
+  local img = load_icon('add')
+  if img and img ~= false then
+    local iw, ih = img:getDimensions()
+    local pad = 3
+    local target = btn.w - pad*2
+    local scale = math.min(target/iw, target/ih)
+    local ox = (target - iw*scale)/2
+    local oy = (target - ih*scale)/2
+    love.graphics.setColor(1,1,1, is_hover and 1 or 0.95)
+    love.graphics.draw(img, btn.x+pad+ox, btn.y+pad+oy, 0, scale, scale)
+  else
+    love.graphics.setColor(1,1,1,0.95)
+    love.graphics.rectangle('fill', btn.x+4, btn.y+btn.h/2-1, btn.w-8, 2)
+    love.graphics.rectangle('fill', btn.x+btn.w/2-1, btn.y+4, 2, btn.h-8)
+  end
+  local tip = 'Show '..(title or which or '')
+  ui._navRects[which..'_collapsed'] = {x=btn.x, y=btn.y, w=btn.w, h=btn.h, action='toggle_min', which=which, tooltip=tip}
+  if is_hover then set_tooltip(tip) end
+end
+
 -- Toolbar buttons (icon-only) -------------------------------------------------
 local function draw_toolbar_icon_button(x, y, opts)
   -- opts: { name='play', active=false, action='toggle_run', tooltip='Play/Pause' }
@@ -394,16 +471,16 @@ function ui.layout(w,h)
 
   -- Bottom section: log at bottom (hide if minimized)
   local logH_full = math.min(140, math.floor(h * 0.18))
-  local logH = ui.minimized.log and 0 or logH_full
-  ui.panels.log = {x=8, y=h - (logH > 0 and (logH + 8) or 8), w=w-16, h=logH}
+  local logH = ui.minimized.log and COLLAPSE_H or logH_full
+  ui.panels.log = {x=8, y=h - (logH + 8), w=w-16, h=logH}
 
   -- Middle row: inputs (left), game (center), outputs (right)
   local midTop = ui.panels.toolbar.y + ui.panels.toolbar.h + 8
   local midBottom = ui.panels.log.y - 8
   local midH = midBottom - midTop
 
-  local leftW = ui.minimized.inputs and 0 or 320
-  local rightW = ui.mergedOutputs and 0 or (ui.minimized.outputs and 0 or 320)
+  local leftW = ui.minimized.inputs and COLLAPSE_W or 320
+  local rightW = ui.mergedOutputs and 0 or (ui.minimized.outputs and COLLAPSE_W or 320)
   local gameWpx = state.tilesX*state.tileSize*state.gameCanvasScale
   local gameHpx = state.tilesY*state.tileSize*state.gameCanvasScale
   local dbgWpx = state.debugCanvasEnabled and (state.debugCanvasW*state.debugCanvasScale) or 0
@@ -426,12 +503,8 @@ function ui.layout(w,h)
   -- Center stacking: Game first if not minimized; Debug below if enabled and not minimized
   local centerX = ui.panels.io_inputs.x + leftW + (leftW>0 and 8 or 0)
   local nextY = midTop
-  local gameH = (ui.minimized.game and 0) or math.min(midH, gameHpx + 16 + NAV_H)
-  local debugH = (state.debugCanvasEnabled and not ui.minimized.debug) and (dbgHpx + 16 + NAV_H) or 0
-  -- If game minimized, let debug take the space from top
-  if ui.minimized.game then
-    gameH = 0
-  end
+  local gameH = ui.minimized.game and COLLAPSE_H or math.min(midH, gameHpx + 16 + NAV_H)
+  local debugH = (state.debugCanvasEnabled) and (ui.minimized.debug and COLLAPSE_H or (dbgHpx + 16 + NAV_H)) or 0
   ui.panels.game = {x=centerX, y=nextY, w=centerW, h=gameH}
   nextY = nextY + (gameH > 0 and (gameH + (debugH>0 and 8 or 0)) or 0)
   ui.panels.debug_center = {x=centerX, y=nextY, w=centerW, h=debugH}
@@ -505,7 +578,10 @@ end
 -- Inputs panel: with optional tabbed merge for Outputs
 function ui.draw_inputs()
   local p = ui.panels.io_inputs
-  if p.w <= 0 or p.h <= 0 then return end
+  if ui.minimized.inputs then
+    draw_collapsed_vertical(p, 'inputs', 'Inputs')
+    return
+  end
   draw_panel(p)
   if ui.mergedOutputs then
     draw_nav_bar(p, '', 'left')
@@ -527,7 +603,10 @@ end
 function ui.draw_outputs()
   if ui.mergedOutputs then return end
   local p = ui.panels.io_outputs
-  if p.w <= 0 or p.h <= 0 then return end
+  if ui.minimized.outputs then
+    draw_collapsed_vertical(p, 'outputs', 'Outputs')
+    return
+  end
   draw_panel(p)
   draw_nav_bar(p, "Outputs", 'outputs')
   panel_content_scissor(p)
@@ -537,7 +616,10 @@ end
 
 function ui.draw_game_canvas()
   local p = ui.panels.game
-  if p.w <= 0 or p.h <= 0 then return {x=p.x+8, y=p.y+NAV_H+8} end
+  if ui.minimized.game then
+    draw_collapsed_horizontal(p, 'game', 'Game')
+    return {x=p.x+8, y=p.y+NAV_H+8}
+  end
   draw_panel(p)
   draw_nav_bar(p, "Game", 'game')
   -- inner rect where canvas is drawn
@@ -548,7 +630,11 @@ end
 
 function ui.draw_debug_canvas_center()
   local p = ui.panels.debug_center
-  if p.w <= 0 or p.h <= 0 then return {x=p.x+8, y=p.y+NAV_H+8} end
+  if p.h <= 0 then return {x=p.x+8, y=p.y+NAV_H+8} end
+  if ui.minimized.debug then
+    draw_collapsed_horizontal(p, 'debug', 'Debug')
+    return {x=p.x+8, y=p.y+NAV_H+8}
+  end
   draw_panel(p)
   draw_nav_bar(p, "Debug", 'debug')
   local cx = p.x+8
@@ -558,7 +644,9 @@ end
 
 function ui.draw_log(logger)
   local p = ui.panels.log
-  if p.h > 0 then
+  if ui.minimized.log then
+    draw_collapsed_horizontal(p, 'log', 'Log')
+  else
     draw_panel(p)
     draw_nav_bar(p, "Log", 'log')
     local lines = logger.getLines(200)
@@ -664,6 +752,11 @@ function ui.mousemoved(mx,my, dx,dy)
     local rect = ui._activeSlider.rect
     local v = (mx - rect.x)/rect.w
     state.inputN[i] = math.max(0, math.min(1, v))
+  end
+  -- Update tooltip position during hover
+  if ui._hoverTip then
+    ui._hoverTip.x = mx + 14
+    ui._hoverTip.y = my + 18
   end
 end
 
