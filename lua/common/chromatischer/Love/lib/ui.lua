@@ -208,8 +208,9 @@ local function draw_nav_bar(p, title, which)
       end
 
       -- Use unique keys per control to avoid collisions with minimize/other buttons
-      ui._navRects['detach_'..which] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_detach', which=which, tooltip = is_det and 'Attach back to main window' or 'Detach into separate window'}
-      if is_hover then set_tooltip(ui._navRects[which].tooltip) end
+      local det_tip = is_det and 'Attach back to main window' or 'Detach into separate window'
+      ui._navRects['detach_'..which] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_detach', which=which, tooltip = det_tip}
+      if is_hover then set_tooltip(det_tip) end
 
       -- Minimize button (left of detach)
       bx = bx - spacing - btnSize
