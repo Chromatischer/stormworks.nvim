@@ -44,6 +44,12 @@ local state = {
     ui = nil,
     mono = nil,
   },
+
+  -- Detached viewer flags
+  detached = {
+    enabled = false,
+    which = nil, -- 'game' or 'debug'
+  },
 }
 
 for i=1,32 do

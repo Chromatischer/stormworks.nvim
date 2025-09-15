@@ -5,6 +5,7 @@ local logger = require('lib.logger')
 local sandbox = require('lib.sandbox')
 local storm = require('lib.storm_api')
 local hot = require('lib.hotreload')
+local detach = require('lib.detach')
 
 local function parse_args(args)
   local i = 1
@@ -12,6 +13,9 @@ local function parse_args(args)
     local a = args[i]
     if a == '--script' and args[i+1] then
       state.scriptPath = args[i+1]; i = i + 2
+    elseif a == '--detached' and args[i+1] then
+      state.detached = { enabled = true, which = tostring(args[i+1]) }
+      i = i + 2
     elseif a == '--tiles' and args[i+1] then
       local s = args[i+1]
       local x,y = s:match('^(%d+)%D+(%d+)$')
@@ -55,6 +59,24 @@ function love.load(args)
   logger.install_print_capture()
   parse_args(args or {})
 
+  if state.detached.enabled then
+    -- Detached viewer mode: display frames written by the main process
+    love.window.setTitle("Stormworks Debugger — " .. tostring(state.detached.which):gsub("^%l", string.upper) .. " (Detached)")
+    -- smaller minimums are fine for a single panel
+    local _,_,flags = love.window.getMode()
+    flags.resizable = true; flags.minwidth = 256; flags.minheight = 256
+    love.window.setMode(love.graphics.getWidth(), love.graphics.getHeight(), flags)
+    state._viewer = { img = nil, seq = -1, iw = 0, ih = 0 }
+    -- Intercept OS window close to perform the same as clicking X in UI
+    function love.quit()
+      local base = 'detached/'..tostring(state.detached.which)
+      love.filesystem.write(base .. '/closed.txt', '1')
+      -- Returning nothing or false allows quit to proceed
+    end
+    print('VIEWER READY: '..state.detached.which)
+    return
+  end
+
   -- Fonts
   state.fonts.ui = love.graphics.newFont(13)
   state.fonts.mono = love.graphics.newFont(13)
@@ -63,6 +85,7 @@ function love.load(args)
   canvases.recreateAll()
   sandbox.load_script()
   hot.init(state)
+  detach.init()
 
   print('READY')
 end
@@ -74,6 +97,32 @@ local function try_tick()
 end
 
 function love.update(dt)
+  if state.detached.enabled then
+    -- Poll for updated frame in detached viewer
+    local base = 'detached/'..tostring(state.detached.which)
+    -- Quit signal
+    local qinfo = love.filesystem.getInfo(base .. '/quit.txt')
+    if qinfo then
+      local q = love.filesystem.read(base .. '/quit.txt') or '0'
+      if tostring(q):match('^%s*1') then love.event.quit() return end
+    end
+    if love.filesystem.getInfo(base .. '/seq.txt') then
+      local s = love.filesystem.read(base .. '/seq.txt') or "-1"
+      local seq = tonumber(s) or -1
+      if seq ~= state._viewer.seq then
+        state._viewer.seq = seq
+        local data = love.filesystem.read(base .. '/frame.png')
+        if data then
+          local fileData = love.filesystem.newFileData(data, 'frame.png')
+          local imgData = love.image.newImageData(fileData)
+          state._viewer.iw, state._viewer.ih = imgData:getWidth(), imgData:getHeight()
+          state._viewer.img = love.graphics.newImage(imgData)
+          state._viewer.img:setFilter('nearest','nearest')
+        end
+      end
+    end
+    return
+  end
   -- Hot reload check
   if state.hotReload and hot.update(state, dt) then
     sandbox.reload()
@@ -95,11 +144,32 @@ function love.update(dt)
 end
 
 function love.draw()
+  if state.detached.enabled then
+    love.graphics.clear(0.08,0.08,0.09,1)
+    local img = state._viewer and state._viewer.img
+    if img then
+      local iw, ih = state._viewer.iw, state._viewer.ih
+      local ww, wh = love.graphics.getWidth(), love.graphics.getHeight()
+      -- integer scale clamp 1..8
+      local sx = math.floor(math.min(8, math.max(1, math.floor(ww / iw))))
+      local sy = math.floor(math.min(8, math.max(1, math.floor(wh / ih))))
+      local scale = math.max(1, math.min(sx, sy))
+      local dx = math.floor((ww - iw*scale)/2)
+      local dy = math.floor((wh - ih*scale)/2)
+      love.graphics.setColor(1,1,1,1)
+      love.graphics.draw(img, dx, dy, 0, scale, scale)
+    else
+      love.graphics.setColor(1,1,1,0.6)
+      love.graphics.print('Waiting for '..tostring(state.detached.which)..' frame…', 16, 16)
+    end
+    return
+  end
   love.graphics.clear(0.1,0.1,0.11,1)
   local w,h = love.graphics.getWidth(), love.graphics.getHeight()
   ui.layout(w,h)
   ui.draw_toolbar()
-  ui.draw_inputs()
+  -- If panels are detached, don't draw them in the main window
+  if not detach.is_enabled('inputs') then ui.draw_inputs() end
 
   -- Game canvas draw
   local gamePanel = ui.draw_game_canvas()
@@ -128,7 +198,7 @@ function love.draw()
   love.graphics.pop()
 
   -- Debug canvas
-  if state.debugCanvasEnabled then
+  if state.debugCanvasEnabled and not detach.is_enabled('debug') then
     local dbgPanel = ui.draw_debug_canvas_center()
     canvas_prev = love.graphics.getCanvas()
     love.graphics.setCanvas()
@@ -149,22 +219,31 @@ function love.draw()
     end
   end
 
-  ui.draw_outputs()
+  if not ui.mergedOutputs and not detach.is_enabled('outputs') then ui.draw_outputs() end
   ui.draw_log(logger)
 
   if state.lastError then
     love.graphics.setColor(0.8,0.2,0.2,1)
     love.graphics.print('ERROR: '..tostring(state.lastError), 16, 48)
   end
+
+  -- After drawing canvases, update detached frame writers
+  detach.update()
 end
 
 function love.keypressed(key)
+  if state.detached.enabled then
+    if key == 'escape' then love.event.quit() end
+    return
+  end
   if key == 'space' then state.running = not state.running
   elseif key == 'n' then state.singleStep = true
   elseif key == 'r' then sandbox.reload()
   elseif key == '=' or key == '+' then state.gameCanvasScale = math.min(8, state.gameCanvasScale+1)
   elseif key == '-' then state.gameCanvasScale = math.max(1, state.gameCanvasScale-1)
   elseif key == 'd' then state.debugCanvasEnabled = not state.debugCanvasEnabled; canvases.recreateAll()
+  elseif key == 'f5' then detach.toggle('game')
+  elseif key == 'f6' then if not state.debugCanvasEnabled then state.debugCanvasEnabled = true; canvases.recreateAll() end; detach.toggle('debug')
   end
 end
 
@@ -179,4 +258,47 @@ function love.mousemoved(x,y,dx,dy)
 end
 function love.wheelmoved(dx,dy)
   if ui.wheelmoved then ui.wheelmoved(dx,dy) end
+end
+
+-- Clamp excessive window sizes and enforce minimums to keep layouts sensible
+local MAIN_MIN_W, MAIN_MIN_H = 800, 600
+local MAIN_MAX_W, MAIN_MAX_H = 2560, 1600 -- "reasonable" upper bounds
+local function clamp_window_dimensions(w,h, minw,minh, maxw,maxh)
+  w = math.max(minw, math.min(maxw, w))
+  h = math.max(minh, math.min(maxh, h))
+  return w,h
+end
+
+function love.resize(w, h)
+  if state._resizing_guard then return end
+  if state.detached and state.detached.enabled then
+    -- Detached viewer: limit to 1..8x of canvas size plus margin
+    local iw, ih = 128, 128
+    if state._viewer and state._viewer.iw and state._viewer.iw > 0 then
+      iw, ih = state._viewer.iw, state._viewer.ih
+    elseif state.detached.which == 'game' then
+      iw, ih = state.tilesX*state.tileSize, state.tilesY*state.tileSize
+    elseif state.detached.which == 'debug' then
+      iw, ih = state.debugCanvasW, state.debugCanvasH
+    end
+    local minw, minh = math.max(256, iw+64), math.max(256, ih+64)
+    local maxw, maxh = iw*8 + 64, ih*8 + 64
+    local cw, ch = clamp_window_dimensions(w,h, minw,minh, maxw,maxh)
+    if cw ~= w or ch ~= h then
+      state._resizing_guard = true
+      local _,_,flags = love.window.getMode()
+      love.window.setMode(cw, ch, flags)
+      state._resizing_guard = false
+    end
+    return
+  end
+
+  -- Main window clamp
+  local cw, ch = clamp_window_dimensions(w,h, MAIN_MIN_W, MAIN_MIN_H, MAIN_MAX_W, MAIN_MAX_H)
+  if cw ~= w or ch ~= h then
+    state._resizing_guard = true
+    local _,_,flags = love.window.getMode()
+    love.window.setMode(cw, ch, flags)
+    state._resizing_guard = false
+  end
 end
