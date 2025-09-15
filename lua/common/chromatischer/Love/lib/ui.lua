@@ -207,7 +207,8 @@ local function draw_nav_bar(p, title, which)
         end
       end
 
-      ui._navRects[which] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_detach', which=which, tooltip = is_det and 'Attach back to main window' or 'Detach into separate window'}
+      -- Use unique keys per control to avoid collisions with minimize/other buttons
+      ui._navRects['detach_'..which] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_detach', which=which, tooltip = is_det and 'Attach back to main window' or 'Detach into separate window'}
       if is_hover then set_tooltip(ui._navRects[which].tooltip) end
 
       -- Minimize button (left of detach)
@@ -231,7 +232,7 @@ local function draw_nav_bar(p, title, which)
         love.graphics.rectangle('fill', bx+4, by+btnSize/2-1, btnSize-8, 2)
       end
       local tip = is_min and ('Show '..(title or which or '')) or ('Hide '..(title or which or ''))
-      ui._navRects[which..'_min'] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_min', which=min_key, tooltip=tip}
+      ui._navRects['min_'..which] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_min', which=min_key, tooltip=tip}
       if is_hover_min then set_tooltip(tip) end
     end
   end
@@ -265,7 +266,7 @@ local function draw_nav_bar(p, title, which)
         love.graphics.rectangle('fill', bx+4, by+btnSize/2-1, btnSize-8, 2)
       end
       local tip = is_min and 'Show panel' or 'Hide panel'
-      ui._navRects[(which..'_min')] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_min', which=key, tooltip=tip}
+      ui._navRects['min_'..which] = {x=bx, y=by, w=btnSize, h=btnSize, action='toggle_min', which=key, tooltip=tip}
       if is_hover then set_tooltip(tip) end
     end
   end
@@ -522,6 +523,7 @@ function ui.draw_toolbar()
   local p = ui.panels.toolbar
   draw_panel(p)
   ui._toolbarRects = {}
+  ui._navRects = {} -- reset nav/hit regions each frame to avoid stale overlaps
   ui._hoverTip = nil
   local x = p.x + 8
   local y = p.y + math.floor((p.h - 22)/2)
