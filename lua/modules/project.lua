@@ -63,6 +63,8 @@ function M.mark_as_micro_project()
     file:write("    removeRedundancies = true,\n")
     file:write("    removeComments = true,\n")
     file:write("    shortenStringDuplicates = true,\n")
+    file:write("    -- Do not include debug-only draw code in compiled output\n")
+    file:write("    stripOnDebugDraw = true,\n")
     file:write("    -- More aggressive optimizations (enabled by default)\n")
     file:write("    shortenVariables = true,\n")
     file:write("    shortenGlobals = true,\n")
@@ -165,6 +167,8 @@ function M.get_build_params(project_config)
     shortenStringDuplicates = true,
     removeComments = true,
     skipCombinedFileOutput = false,
+    -- By default, omit/neutralize user onDebugDraw() code from compiled output
+    stripOnDebugDraw = true,
   }
 
   -- Merge with project-specific settings

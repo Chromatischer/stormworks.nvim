@@ -29,6 +29,7 @@ TOTAL_CHAR_LIMIT = 8100 -- Giving some wiggle room just like nameouschangey says
 ---@field removeComments        boolean if true, strips all comments from the output
 ---@field shortenStringDuplicates boolean if true, reduce duplicate string literals
 ---@field skipCombinedFileOutput  boolean if true, doesn't output the combined file - to speed up the build process
+---@field stripOnDebugDraw      boolean if true, removes any user-defined onDebugDraw() function from compiled output
 
 ---@class Minimizer : BaseClass
 ---@field constants ParsingConstantsLoader list of external, global keywords
@@ -54,6 +55,7 @@ LifeBoatAPI.Tools.Minimizer = {
     this.params.forceNCBoilerplate = LifeBoatAPI.Tools.DefaultBool(this.params.forceNCBoilerplate, false)
     this.params.forceBoilerplate = LifeBoatAPI.Tools.DefaultBool(this.params.forceBoilerplate, false)
     this.params.skipCombinedFileOutput = LifeBoatAPI.Tools.DefaultBool(this.params.skipCombinedFileOutput, false)
+    this.params.stripOnDebugDraw = LifeBoatAPI.Tools.DefaultBool(this.params.stripOnDebugDraw, true)
 
     return this
   end,
@@ -99,6 +101,11 @@ LifeBoatAPI.Tools.Minimizer = {
 
     -- re-parse to remove all code-section comments now we're done with them
     text = parser:removeStringsAndComments(text)
+
+    -- strip user onDebugDraw() implementations entirely if requested
+    if this.params.stripOnDebugDraw then
+      text = this:_stripOnDebugDraw(text)
+    end
 
     -- rename variables so everything is consistent (if creating new globals happens, it's important they have unique names)
     if this.params.shortenVariables then
@@ -235,5 +242,60 @@ LifeBoatAPI.Tools.Minimizer = {
       LifeBoatAPI.Tools.StringUtils.escapeSub(character)
     )
   end,
-}
+
+  --- Remove any function onDebugDraw() ... end (and assignment forms) from the source text
+  --- This runs after strings/comments are stripped, so simple token scanning is safe
+  ---@param this Minimizer
+  ---@param text string
+  ---@return string
+  _stripOnDebugDraw = function(this, text)
+    local function find_next_signature(s, idx)
+      local candidates = {}
+      local sp, ep
+      sp, ep = s:find("%f[%w_]local%s+function%s+onDebugDraw%s*%b()", idx)
+      if sp then table.insert(candidates, {sp=sp, ep=ep}) end
+      sp, ep = s:find("%f[%w_]function%s+onDebugDraw%s*%b()", idx)
+      if sp then table.insert(candidates, {sp=sp, ep=ep}) end
+      sp, ep = s:find("%f[%w_]local%s+onDebugDraw%s*=%s*function%s*%b()", idx)
+      if sp then table.insert(candidates, {sp=sp, ep=ep}) end
+      sp, ep = s:find("%f[%w_]onDebugDraw%s*=%s*function%s*%b()", idx)
+      if sp then table.insert(candidates, {sp=sp, ep=ep}) end
+      table.sort(candidates, function(a,b) return a.sp < b.sp end)
+      if #candidates == 0 then return nil end
+      return candidates[1].sp, candidates[1].ep
+    end
+
+    local function find_matching_end(s, after_sig)
+      local depth = 0
+      local i = after_sig + 1
+      while true do
+        local f1 = s:find("%f[%w_]function%f[^%w_]", i)
+        local e1 = s:find("%f[%w_]end%f[^%w_]", i)
+        if not f1 and not e1 then
+          return #s + 1 -- nothing else; trim to end
+        end
+        if e1 and (not f1 or e1 < f1) then
+          if depth == 0 then
+            return e1 + 3 -- include 'end'
+          end
+          depth = depth - 1
+          i = e1 + 3
+        else
+          depth = depth + 1
+          i = f1 + 8
+        end
+      end
+    end
+
+    local i = 1
+    while true do
+      local s1, s2 = find_next_signature(text, i)
+      if not s1 then break end
+      local endpos = find_matching_end(text, s2)
+      text = text:sub(1, s1 - 1) .. text:sub(endpos)
+      i = s1
+    end
+    return text
+  end,
+} 
 LifeBoatAPI.Tools.Class(LifeBoatAPI.Tools.Minimizer)
