@@ -382,7 +382,8 @@ local function draw_toolbar_icon_button(x, y, opts)
   end
 
   -- register hit rect
-  ui._toolbarRects[#ui._toolbarRects+1] = {x=bx, y=by, w=btnSize, h=btnSize, action=opts.action}
+  ui._toolbarRects[#ui._toolbarRects+1] = {x=bx, y=by, w=btnSize, h=btnSize, action=opts.action, tooltip=opts.tooltip}
+  if is_hover and opts.tooltip then set_tooltip(opts.tooltip) end
 
   return btnSize
 end
@@ -529,28 +530,32 @@ function ui.draw_toolbar()
   x = x + draw_toolbar_icon_button(x, y, {
     name = state.running and 'pause' or 'play',
     active = state.running,
-    action = 'toggle_run'
+    action = 'toggle_run',
+    tooltip = state.running and 'Pause [Space]' or 'Play [Space]'
   }) + 6
 
   -- Step
   x = x + draw_toolbar_icon_button(x, y, {
     name = 'step',
     active = false,
-    action = 'step'
+    action = 'step',
+    tooltip = 'Step [N]'
   }) + 6
 
   -- Reload
   x = x + draw_toolbar_icon_button(x, y, {
     name = 'refresh',
     active = false,
-    action = 'reload'
+    action = 'reload',
+    tooltip = 'Reload [R]'
   }) + 12
 
   -- Debug toggle
   x = x + draw_toolbar_icon_button(x, y, {
     name = 'bug',
     active = state.debugCanvasEnabled,
-    action = 'toggle_debug'
+    action = 'toggle_debug',
+    tooltip = (state.debugCanvasEnabled and 'Disable Debug Canvas [D]' or 'Enable Debug Canvas [D]')
   }) + 16
 
   -- Scale controls
@@ -560,12 +565,14 @@ function ui.draw_toolbar()
   x = x + draw_toolbar_icon_button(x, y, {
     name = 'remove',
     active = false,
-    action = 'scale_minus'
+    action = 'scale_minus',
+    tooltip = 'Scale - [-]'
   }) + 6
   x = x + draw_toolbar_icon_button(x, y, {
     name = 'add',
     active = false,
-    action = 'scale_plus'
+    action = 'scale_plus',
+    tooltip = 'Scale + [+]'
   }) + 16
 
   -- Static info (tiles, tick)
