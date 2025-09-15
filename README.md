@@ -97,6 +97,7 @@ return {
     removeRedundancies = true,
     removeComments = true,
     shortenStringDuplicates = true,
+    stripOnDebugDraw = true,
     shortenVariables = true,
     shortenGlobals = true,
     shortenNumbers = true,
@@ -168,6 +169,7 @@ Current status:
 - Single-threaded build path is used by default.
 - Multithreaded builds are planned.
 - Addon build flow is on the roadmap.
+ - By default, any user-defined `onDebugDraw()` function is stripped from compiled output. You can override this by setting `stripOnDebugDraw = false` in your project's `build_params`.
 
 
 ## Troubleshooting
