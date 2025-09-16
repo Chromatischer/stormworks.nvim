@@ -25,6 +25,16 @@ M.setup_autodetection = commands.setup_autodetection
 M.run_love_ui = love_runner.run_current_script
 M.register_keymaps = keys.register_keymaps
 
+  -- Auto-load VSCode-style snippets for LuaSnip (if available)
+  pcall(function()
+    local ok, loader = pcall(require, 'luasnip.loaders.from_vscode')
+    if ok and loader and loader.lazy_load then
+      local path = debug.getinfo(1, "S").source:sub(2):match("(.*)/lua/main.lua") or debug.getinfo(1, "S").source:sub(2):match("(.*)/main.lua")
+      if path then loader.lazy_load({ paths = { path .. "/snippets" } }) end
+    end
+  end)
+
+
 -- Setup function called by user in their config
 function M.setup(user_config)
   -- Setup configuration

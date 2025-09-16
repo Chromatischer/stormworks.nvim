@@ -3,6 +3,7 @@
     "prefix": ["sw.onattatch", "onattatch"],
     "description": "Stormworks onAttatch() config stub including input simulator",
     "body": [
+      "---@return MicrocontrollerConfig & { input_simulator?: InputSimulator, input_simulator_config?: table }",
       "function onAttatch()",
       "  return {",
       "    tick = ${1:60},",
@@ -12,6 +13,7 @@
       "    debugCanvasSize = { w = ${5:320}, h = ${6:120} },",
       "    properties = { ${7:MyNumber} = ${8:1} },",
       "    -- Attach an input simulator (function-form or table-form module)",
+      "    ---@type InputSimulator",
       "    input_simulator = require('${9:simulators.my_sim}'),",
       "    input_simulator_config = { ${10:key} = ${11:value} }",
       "  }",
