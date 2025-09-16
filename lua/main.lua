@@ -28,10 +28,17 @@ M.register_keymaps = keys.register_keymaps
   -- Auto-load VSCode-style snippets for LuaSnip (if available)
   pcall(function()
     local ok, loader = pcall(require, 'luasnip.loaders.from_vscode')
-    if ok and loader and loader.lazy_load then
-      local path = debug.getinfo(1, "S").source:sub(2):match("(.*)/lua/main.lua") or debug.getinfo(1, "S").source:sub(2):match("(.*)/main.lua")
-      if path then loader.lazy_load({ paths = { path .. "/snippets" } }) end
-    end
+    if not (ok and loader and loader.lazy_load) then return end
+    local src = debug.getinfo(1, 'S').source or ''
+    if src:sub(1,1) == '@' then src = src:sub(2) end
+    -- This file is .../lua/sw-micro-project/lua/main.lua
+    local script_dir = src:match('(.*/)') or ''
+    -- plugin root = .../lua/sw-micro-project/
+    local plugin_root = script_dir .. '../'
+    -- normalize any /segment/../
+    plugin_root = plugin_root:gsub('/%./', '/'):gsub('/[^/]+/%.%./', '/'):gsub('/[^/]+/%.%./', '/')
+    local snippets_dir = plugin_root .. 'snippets'
+    loader.lazy_load({ paths = { snippets_dir } })
   end)
 
 
