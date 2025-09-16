@@ -80,7 +80,7 @@ function M.create_commands()
 
       -- Basic flag completion for ui
       if parts[2] == "ui" then
-        local flags = { "--tiles", "--tick", "--scale", "--debug-canvas", "--props", "--lib" }
+        local flags = { "--tiles", "--tick", "--scale", "--debug-canvas", "--props", "--lib", "--libs" }
         local partial = parts[#parts] or ""
         return vim.tbl_filter(function(f)
           return f:find("^" .. vim.pesc(partial))

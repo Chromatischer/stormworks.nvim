@@ -4,6 +4,8 @@
 local M = {}
 
 local config = require("sw-micro-project.lua.modules.config")
+local project = require("sw-micro-project.lua.modules.project")
+local love_runner = require("sw-micro-project.lua.modules.love_runner")
 
 -- Register default keymaps under <leader>S (configurable)
 function M.register_keymaps()
@@ -47,7 +49,13 @@ function M.register_keymaps()
 
   if km.ui ~= false and km.ui then
     nmap(prefix .. km.ui, function()
-      vim.cmd("MicroProject ui")
+      -- Ensure project libs from .microproject are applied, then run UI using module API
+      local ok_detect, marker = pcall(project.detect_micro_project)
+      if ok_detect and marker then
+        pcall(project.setup_project_libraries)
+      end
+      -- Run via API so it picks up config.project_libs and current_project.config.libraries
+      love_runner.run_current_script({})
     end, "MicroProject: Run with LÖVE")
   end
 

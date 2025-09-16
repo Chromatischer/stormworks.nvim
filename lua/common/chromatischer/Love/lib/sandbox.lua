@@ -30,55 +30,109 @@ local function make_env()
   for k,v in pairs(safe_tables) do env[k] = v end
   -- Attach Stormworks-like API
   storm.bind_to_env(env)
-  -- Prevent access to os, io, debug, package, love by default
+  -- Prevent access to os, io, debug, love by default
   env._G = env
-
-  -- Provide a safe require that only loads Lua files from whitelisted folders (state.libPaths)
-  local loaded = {}
-  local function safe_require(modname)
-    if type(modname) ~= 'string' then return nil, 'module name must be a string' end
-    if loaded[modname] ~= nil then return loaded[modname] end
-    local rel = modname:gsub('%.', '/')
-    local tried = {}
-    for _,root in ipairs(state.libPaths or {}) do
-      -- Try root/rel.lua then root/rel/init.lua
-      local candidates = {
-        (root .. '/' .. rel .. '.lua'),
-        (root .. '/' .. rel .. '/init.lua'),
-      }
-      for _,cand in ipairs(candidates) do
-        local f = io.open(cand, 'rb')
-        if f then
-          local src = f:read('*a'); f:close()
-          local chunk, perr = load_chunk(src, '@'..cand, env)
-          if not chunk then
-            return error('error loading module '..modname..': '..tostring(perr))
+  -- Custom require that loads modules into the sandbox env and searches whitelisted lib roots
+  do
+    local loaded = {}
+    local function load_chunk_from_file(path, chunkname)
+      local f = io.open(path, 'rb')
+      if not f then return nil, 'cannot open '..path end
+      local src = f:read('*a'); f:close()
+      local fn, err
+      local loader = loadstring or load
+      if loader == load and _VERSION ~= 'Lua 5.1' then
+        fn, err = load(src, chunkname or '@'..path, 't', env)
+      else
+        fn, err = loadstring(src, chunkname or '@'..path)
+        if fn and setfenv then setfenv(fn, env) end
+      end
+      if not fn then return nil, err end
+      return fn
+    end
+    local function safe_require(modname)
+      if type(modname) ~= 'string' then error('module name must be a string') end
+      if loaded[modname] ~= nil then return loaded[modname] end
+      local rel = modname:gsub('%.', '/')
+      local tried = {}
+      for _,root in ipairs(state.libPaths or {}) do
+        local candidates = {
+          (root .. '/' .. rel .. '.lua'),
+          (root .. '/' .. rel .. '/init.lua'),
+        }
+        for _,cand in ipairs(candidates) do
+          local fn = load_chunk_from_file(cand, '@'..cand)
+          if fn then
+            if logger and logger.append then logger.append('[require] loading '..modname..' from '..cand) end
+            local ok, ret = xpcall(fn, debug.traceback)
+            if not ok then error('error running module '..modname..': '..tostring(ret)) end
+            if ret == nil then ret = true end
+            loaded[modname] = ret
+            if logger and logger.append then
+              local note = ''
+              if modname == 'Vectors.vec3' then
+                note = ' Vec3='..tostring(env.Vec3)
+              elseif modname == 'Vectors.vec2' then
+                note = ' Vec2='..tostring(env.Vec2)
+              elseif modname == 'Vectors.Vectors' then
+                note = ' (post-load: Vec2='..tostring(env.Vec2)..' Vec3='..tostring(env.Vec3)..')'
+              end
+              logger.append('[require] loaded '..modname..note)
+            end
+            return ret
+          else
+            table.insert(tried, cand)
           end
-          local ok, ret = xpcall(chunk, debug.traceback)
-          if not ok then
-            error('error running module '..modname..': '..tostring(ret))
-          end
-          -- require semantics: if module returns a value, cache it; otherwise true
-          if ret == nil then ret = true end
-          loaded[modname] = ret
-          return ret
-        else
-          table.insert(tried, cand)
         end
       end
+      -- Try resolving via package.path entries ourselves so we can load into env
+      do
+        local path = package and package.path or nil
+        if path then
+          local relname = rel
+          for patt in path:gmatch("[^;]+") do
+            local cand = patt:gsub('%%%?.', '%%?') -- defensive
+            cand = cand:gsub('%?', relname)
+            local fn = load_chunk_from_file(cand, '@'..cand)
+            if fn then
+              if logger and logger.append then logger.append('[require] package.path resolved '..modname..' from '..cand) end
+              local ok, ret = xpcall(fn, debug.traceback)
+              if not ok then error('error running module '..modname..': '..tostring(ret)) end
+              if ret == nil then ret = true end
+              loaded[modname] = ret
+              return ret
+            else
+              table.insert(tried, cand)
+            end
+          end
+        end
+      end
+      -- As a last-last resort, try host require (will not pollute env globals)
+      local ok, ret = pcall(require, modname)
+      if ok then
+        loaded[modname] = ret
+        if logger and logger.append then logger.append('[require] host require resolved '..modname..' (globals not imported)') end
+        return ret
+      end
+      error("module '"..modname.."' not found in whitelisted lib paths. Tried: "..table.concat(tried, ', '))
     end
-    error("module '"..modname.."' not found in whitelisted lib paths. Tried: "..table.concat(tried, ', '))
+    env.require = safe_require
   end
-  env.require = safe_require
-  env.package = nil -- keep blocked
   return env
 end
 
 local function load_chunk(code, chunkname, env)
-  local fn, err = loadstring(code, chunkname)
-  if not fn then return nil, err end
-  if setfenv then setfenv(fn, env) end
-  return fn
+  -- LuaJIT/Lua 5.1: use loadstring + setfenv
+  -- Lua 5.2+: use load with env param
+  local loader = loadstring or load
+  if loader == load and _VERSION ~= 'Lua 5.1' then
+    return load(code, chunkname, 't', env)
+  else
+    local fn, err = loadstring(code, chunkname)
+    if not fn then return nil, err end
+    if setfenv then setfenv(fn, env) end
+    return fn
+  end
 end
 
 function sandbox.load_script()

@@ -21,9 +21,16 @@ local function parse_args(args)
           table.insert(state.libPaths, dir)
         end
       end
-    elseif a == '--lib' and args[i+1] then
+    elseif (a == '--lib' or a == '--libs') and args[i+1] then
       state.libPaths = state.libPaths or {}
-      table.insert(state.libPaths, args[i+1])
+      local p = args[i+1]
+      -- Expand ~ to HOME for convenience when running manually
+      if type(p) == 'string' and p:sub(1,1) == '~' then
+        local home = os and os.getenv and os.getenv('HOME') or nil
+        if home then p = home .. p:sub(2) end
+      end
+      table.insert(state.libPaths, p)
+      print('Added lib root from CLI: '..tostring(p))
       i = i + 2
     elseif a == '--detached' and args[i+1] then
       state.detached = { enabled = true, which = tostring(args[i+1]) }
@@ -72,6 +79,32 @@ function love.load(args)
   if love.graphics.setPointStyle then love.graphics.setPointStyle('rough') end
   logger.install_print_capture()
   parse_args(args or {})
+  -- Debug: print lib roots and resulting package.path for troubleshooting
+  do
+    print('LIB ROOTS (raw):')
+    for i,p in ipairs(state.libPaths or {}) do print('  ['..i..'] '..tostring(p)) end
+  end
+  -- Expand package.path to include any whitelisted lib roots
+  do
+    local parts = {}
+    local normalized = {}
+    for _,root in ipairs(state.libPaths or {}) do
+      local r = tostring(root)
+      -- Strip trailing slashes and resolve ./ and ../ as best as we can with love.filesystem? Nah, use raw
+      r = r:gsub('/+$','')
+      table.insert(normalized, r)
+      -- Support both flat files and tree modules
+      table.insert(parts, r .. "/?.lua")
+      table.insert(parts, r .. "/?/init.lua")
+    end
+    print('LIB ROOTS (normalized):')
+    for i,p in ipairs(normalized) do print('  ['..i..'] '..tostring(p)) end
+    if #parts > 0 then
+      package.path = table.concat(parts, ";") .. ";" .. package.path
+    end
+  end
+  print('PACKAGE.PATH:')
+  print(package.path)
 
   if state.detached.enabled then
     -- Detached viewer mode: display frames written by the main process
