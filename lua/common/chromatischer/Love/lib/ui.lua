@@ -516,7 +516,10 @@ function ui.layout(w,h)
     ui.panels.io_outputs = {x=ui.panels.io_inputs.x, y=ui.panels.io_inputs.y, w=leftW, h=midH}
   else
     local outX = centerX + centerW + (centerW>0 and 8 or 0)
-    ui.panels.io_outputs = {x=outX, y=midTop, w=rightW, h=midH}
+    -- When minimized, pin the collapsed Outputs bar to the right edge of the screen
+    -- instead of the inner edge next to the center panel.
+    local outputsX = ui.minimized.outputs and (w - 8 - rightW) or outX
+    ui.panels.io_outputs = {x=outputsX, y=midTop, w=rightW, h=midH}
   end
 end
 
