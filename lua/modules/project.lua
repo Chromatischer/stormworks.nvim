@@ -15,6 +15,7 @@ end
 -- Hardcoded standard library path (relative to plugin directory)
 local STANDARD_LIB_PATH = get_plugin_directory() .. "../common/nameouschangey/MicroController/microcontroller.lua"
 local LOVE_LIB_PATH = get_plugin_directory() .. "../common/chromatischer/LspHinting/love.lua"
+local SIM_LIB_PATH  = get_plugin_directory() .. "../common/chromatischer/LspHinting/simulator.lua"
 
 -- Utility function to check if file exists
 local function file_exists(path)
@@ -131,6 +132,14 @@ function M.setup_project_libraries()
     print("✓ Added debug library: " .. dbg_lib)
   else
     print("⚠ Debug library not found at: " .. dbg_lib)
+  end
+  -- Add simulator context type stubs for IntelliSense
+  local sim_lib = vim.fn.expand(SIM_LIB_PATH)
+  if file_exists(sim_lib) then
+    table.insert(config.project_libs, sim_lib)
+    print("✓ Added simulator hint library: " .. sim_lib)
+  else
+    print("⚠ Simulator hint library not found at: " .. sim_lib)
   end
 
   -- Add user-defined libraries

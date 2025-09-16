@@ -3,7 +3,7 @@ local state = require('lib.state')
 local logger = require('lib.logger')
 local storm = require('lib.storm_api')
 
-local sandbox = { env = nil }
+local sandbox = { env = nil, sim = nil }
 
 local safe_globals = {
   "assert","error","ipairs","next","pairs","pcall","select","tonumber","tostring","type","unpack","xpcall","print",
@@ -30,6 +30,9 @@ local function make_env()
   for k,v in pairs(safe_tables) do env[k] = v end
   -- Attach Stormworks-like API
   storm.bind_to_env(env)
+  -- Provide editor-only type aliases to the env (no runtime cost)
+  ---@type InputSimulator
+  env._input_simulator_typehint = nil
   -- Prevent access to os, io, debug, love by default
   env._G = env
   -- Custom require that loads modules into the sandbox env and searches whitelisted lib roots
@@ -159,6 +162,7 @@ function sandbox.load_script()
     return false, runerr
   end
   sandbox.env = env
+  sandbox.sim = nil -- clear any previous simulator on fresh load
   -- If the MC defines onAttatch (note: spelled as requested), allow it to configure runtime
   if type(env.onAttatch) == 'function' then
     local okAttach, cfgOrErr = xpcall(env.onAttatch, debug.traceback)
@@ -197,6 +201,63 @@ function sandbox.load_script()
         if type(cfg.properties) == 'table' then
           for k,v in pairs(cfg.properties) do state.properties[k] = v end
         end
+
+        -- Input simulator support
+        local sim = cfg.input_simulator
+        if sim ~= nil then
+          -- Normalize simulator hooks
+          local hooks = nil
+          if type(sim) == 'function' then
+            hooks = { onTick = sim }
+          elseif type(sim) == 'table' then
+            hooks = sim
+          else
+            logger.append('[warn] input_simulator is not a function or table; ignoring')
+          end
+          if hooks then
+            -- Build simulator context
+            local function clampChannel(ch)
+              ch = tonumber(ch)
+              if not ch then return nil end
+              ch = math.floor(ch)
+              if ch < 1 or ch > 32 then return nil end
+              return ch
+            end
+            local sim_ctx = {}
+            sim_ctx.input = {}
+            function sim_ctx.input.setBool(ch, v)
+              ch = clampChannel(ch); if not ch then return end
+              state.inputB[ch] = not not v
+            end
+            function sim_ctx.input.setNumber(ch, v)
+              ch = clampChannel(ch); if not ch then return end
+              local num = tonumber(v) or 0
+              if num ~= num then num = 0 end
+              state.inputN[ch] = num
+            end
+            function sim_ctx.input.getBool(ch)
+              ch = clampChannel(ch); if not ch then return false end
+              return state.inputB[ch] or false
+            end
+            function sim_ctx.input.getNumber(ch)
+              ch = clampChannel(ch); if not ch then return 0 end
+              return state.inputN[ch] or 0
+            end
+            sim_ctx.properties = state.properties -- read-only by convention
+            sim_ctx.time = { getDelta = function() return state.lastTickDt end }
+
+            sandbox.sim = { hooks = hooks, ctx = sim_ctx, cfg = cfg.input_simulator_config }
+            -- Initialize simulator if it exposes onInit
+            if type(hooks.onInit) == 'function' then
+              local okSim, errSim = xpcall(function() hooks.onInit(sim_ctx, cfg.input_simulator_config) end, debug.traceback)
+              if not okSim then
+                logger.append('[error] input_simulator onInit: '..tostring(errSim))
+                if state.pauseOnError then state.running = false end
+              end
+            end
+          end
+        end
+
       else
         logger.append('[warn] onAttatch did not return a table; ignoring')
       end
@@ -221,6 +282,17 @@ local function safe_call(name)
 end
 
 function sandbox.tick()
+  -- 1) Simulator tick (pre-user)
+  if sandbox.sim and sandbox.sim.hooks and type(sandbox.sim.hooks.onTick) == 'function' then
+    local okSim, errSim = xpcall(function() return sandbox.sim.hooks.onTick(sandbox.sim.ctx) end, debug.traceback)
+    if not okSim then
+      logger.append('[error] input_simulator onTick: '..tostring(errSim))
+      state.lastError = errSim
+      if state.pauseOnError then state.running = false end
+      -- still attempt user onTick afterward if running isn't paused
+    end
+  end
+  -- 2) User tick
   return safe_call('onTick')
 end
 

@@ -193,7 +193,8 @@ function time.getDelta() end
 
 -- Lifecycle hooks provided by MC scripts
 
----@alias MicrocontrollerConfig {tick?:number, tiles?:string|{x:integer,y:integer}, scale?:integer, debugCanvas?:boolean, debugCanvasSize?:{w:integer,h:integer}, properties?:table}
+---@alias MicrocontrollerConfig {tick?:number, tiles?:string|{x:integer,y:integer}, scale?:integer, debugCanvas?:boolean, debugCanvasSize?:{w:integer,h:integer}, properties?:table, input_simulator?: InputSimulator, input_simulator_config?: table}
+---@alias InputSimulator fun(ctx: SimulatorCtx) | InputSimulatorTable
 
 --- Configure the microcontroller and editor environment
 --- Return a table such as:
@@ -209,3 +210,26 @@ function onDraw() end
 
 --- Draw to the debug canvas (if enabled)
 function onDebugDraw() end
+
+--------------------------------------------------------------------------------
+-- Input Simulator LSP Hinting (types only)
+--------------------------------------------------------------------------------
+
+---@class SimulatorInputCtx
+---@field setBool fun(ch: integer, v: boolean)
+---@field setNumber fun(ch: integer, v: number)
+---@field getBool fun(ch: integer): boolean
+---@field getNumber fun(ch: integer): number
+
+---@class SimulatorTimeCtx
+---@field getDelta fun(): number
+
+---@class SimulatorCtx
+---@field input SimulatorInputCtx
+---@field properties table<string, any>
+---@field time SimulatorTimeCtx
+
+---@class InputSimulatorTable
+---@field onInit fun(ctx: SimulatorCtx, cfg: table|nil)|nil
+---@field onTick fun(ctx: SimulatorCtx)
+---@field onDebugDraw fun()|nil

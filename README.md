@@ -200,3 +200,133 @@ Current status:
 Issues and pull requests are welcome. If you’re proposing larger changes, please open an issue first to discuss the approach.
 
   - Additionally supports multiple --lib <path> flags to whitelist module roots for 'require' inside the simulator. Defaults to including the script's directory, the project root, and bundled Common libraries.
+
+## Input Simulator (via onAttatch)
+
+You can define an input simulator module and attach it through your microcontroller script’s `onAttatch()` to programmatically drive inputs each tick, before your `onTick()` runs. This is useful for automated testing, synthetic signals, or reproducing scenarios.
+
+- In your MC script:
+
+```lua
+function onAttatch()
+  return {
+    input_simulator = require('simulators.wave_and_toggle'),
+    input_simulator_config = { amplitude = 1.0, freq_hz = 0.5, target_num = 1, target_bool = 1 },
+    debugCanvas = true,
+    debugCanvasSize = { w = 320, h = 120 },
+  }
+end
+```
+
+- Simulator module interface:
+  - function form: returns a function(ctx) to be called every tick
+  - table form: `{ onInit(ctx, cfg?), onTick(ctx), onDebugDraw?() }`
+
+- Context (ctx):
+  - `ctx.input.setBool(ch, v)`, `ctx.input.setNumber(ch, v)` — writes to the input channels (1..32)
+  - `ctx.input.getBool(ch)`, `ctx.input.getNumber(ch)` — reads current inputs
+  - `ctx.properties` — read-only view of `state.properties`
+  - `ctx.time.getDelta()` — per-tick delta time
+
+- Debug canvas: If `debugCanvas` is enabled, the simulator may implement `onDebugDraw()` to draw with the `dbg.*` API.
+
+- UI reflection: The simulator mutates the same `state.inputB/N` the UI uses; changes appear in the Inputs panel automatically.
+
+- Hot reload: Edits to the MC or simulator will be picked up on reload; `onInit` is called after reload.
+
+### Writing an Input Simulator
+
+There are two supported styles: a function-form simulator or a table-form simulator.
+
+1) Function-form (simplest)
+
+```lua
+-- simulators/my_sim.lua
+---@param ctx SimulatorCtx
+return function(ctx)
+  -- Called every tick before your microcontroller's onTick()
+  -- Write to inputs:
+  ctx.input.setBool(1, true)
+  ctx.input.setNumber(1, math.sin(love.timer.getTime()))
+end
+```
+
+Attach it in your MC script:
+```lua
+---@type InputSimulator
+local sim = require('simulators.my_sim')
+
+function onAttatch()
+  return {
+    input_simulator = sim,
+  }
+end
+```
+
+2) Table-form (lifecycle + debug drawing)
+
+```lua
+-- simulators/my_adv_sim.lua
+---@class MyAdvSim : InputSimulatorTable
+local M = { t = 0 }
+
+---@param ctx SimulatorCtx
+---@param cfg table|nil
+function M.onInit(ctx, cfg)
+  -- Optional, runs once on load and on reload
+  M.freq = (cfg and tonumber(cfg.freq_hz)) or 1.0
+  M.chN = (cfg and tonumber(cfg.num_ch)) or 1
+  M.chB = (cfg and tonumber(cfg.bool_ch)) or 1
+end
+
+---@param ctx SimulatorCtx
+function M.onTick(ctx)
+  local dt = ctx.time.getDelta()
+  M.t = M.t + dt
+  local v = math.sin(2*math.pi*M.freq*M.t)
+  ctx.input.setNumber(M.chN, v)     -- no clamp (can be any numeric range)
+  ctx.input.setBool(M.chB, v > 0)   -- derived boolean
+end
+
+-- Optional: draws to Debug canvas (if enabled)
+function M.onDebugDraw()
+  dbg.setColor(0,255,0)
+  local w, h = dbg.getWidth(), dbg.getHeight()
+  local cx, cy = w/2, h/2
+  dbg.drawLine(cx-20, cy, cx+20, cy)
+end
+
+return M
+```
+
+Attach with configuration:
+```lua
+---@type InputSimulator
+local sim = require('simulators.my_adv_sim')
+
+function onAttatch()
+  return {
+    input_simulator = sim,
+    input_simulator_config = {
+      freq_hz = 0.5,
+      num_ch = 2,
+      bool_ch = 1
+    },
+    debugCanvas = true,
+    debugCanvasSize = { w = 256, h = 128 },
+  }
+end
+```
+
+Notes and best practices
+- Simulator order: The simulator’s onTick(ctx) runs before your microcontroller’s onTick().
+- Input ranges: ctx.input.setNumber does not clamp — you can write any number. The Inputs panel sliders still range 0..1 for manual user input.
+- UI reflection: Values written by the simulator show up in Inputs panel (same data source).
+- Debug drawing: If you set debugCanvas = true, implement onDebugDraw and use dbg.* to draw overlays.
+- Reload: Editing either the microcontroller or the simulator triggers a reload; onInit(ctx, cfg) runs again.
+- Require paths: Your simulator module must be discoverable via:
+  - The microcontroller script’s directory (auto-whitelisted), or
+  - Any extra paths passed using :MicroProject ui --lib /path or added via :MicroProject add.
+- LSP hinting: The repository ships with type stubs for the simulator and context so lua-language-server provides completions. See:
+  - lua/common/chromatischer/LspHinting/simulator.lua
+  - lua/common/chromatischer/LspHinting/love.lua

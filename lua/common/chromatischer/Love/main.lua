@@ -258,6 +258,13 @@ function love.draw()
       love.graphics.setCanvas()
       canvases.withTarget('debug', function(api)
         api.clear(0,0,0,255)
+        -- Simulator debug draw first (if provided)
+        if sandbox.sim and sandbox.sim.hooks and type(sandbox.sim.hooks.onDebugDraw) == 'function' then
+          local okSim, errSim = xpcall(sandbox.sim.hooks.onDebugDraw, debug.traceback)
+          if not okSim then
+            logger.append('[error] input_simulator onDebugDraw: '..tostring(errSim))
+          end
+        end
         if sandbox.env and type(sandbox.env.onDebugDraw) == 'function' then
           local ok, err = xpcall(sandbox.env.onDebugDraw, debug.traceback)
           if not ok then
