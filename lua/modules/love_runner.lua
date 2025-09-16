@@ -2,6 +2,7 @@
 -- Launch the LÖVE2D-based Stormworks UI against the current script
 
 local config = require("sw-micro-project.lua.modules.config")
+local project = require("sw-micro-project.lua.modules.project")
 
 local M = {}
 
@@ -37,6 +38,11 @@ end
 local function build_args(opts)
   local args = { "--" }
   if opts.script then table.insert(args, "--script"); table.insert(args, opts.script) end
+  if opts.libs and type(opts.libs) == 'table' then
+    for _,lib in ipairs(opts.libs) do
+      table.insert(args, "--lib"); table.insert(args, lib)
+    end
+  end
   if opts.tiles then table.insert(args, "--tiles"); table.insert(args, tostring(opts.tiles)) end
   if opts.tick then table.insert(args, "--tick"); table.insert(args, tostring(opts.tick)) end
   if opts.scale then table.insert(args, "--scale"); table.insert(args, tostring(opts.scale)) end
@@ -72,8 +78,23 @@ function M.run_current_script(opts)
     return
   end
 
+  -- Provide default lib search roots for the simulator: project root and common libs
+  local libs = {}
+  local proj_root = vim.loop.cwd()
+  table.insert(libs, proj_root)
+  -- Also include LifeBoatAPI and any 'Common' folder next to the script, if present
+  local lua_dir = get_plugin_directory():gsub("/modules/?$", "/")
+  local lifeboat_dir = path_join(lua_dir, "common/nameouschangey/Common")
+  local chroma_common = path_join(lua_dir, "common/chromatischer")
+  if vim.fn.isdirectory(lifeboat_dir) == 1 then table.insert(libs, lifeboat_dir) end
+  if vim.fn.isdirectory(chroma_common) == 1 then table.insert(libs, chroma_common) end
+  -- If project libraries are configured, include any directories there as well
+  for _, p in ipairs(config.project_libs or {}) do
+    if vim.fn.isdirectory(p) == 1 then table.insert(libs, p) end
+  end
+
   local cli = { love_bin, love_root }
-  local extra = build_args(vim.tbl_extend("force", { script = script_path }, opts))
+  local extra = build_args(vim.tbl_extend("force", { script = script_path, libs = libs }, opts))
   for _,a in ipairs(extra) do table.insert(cli, a) end
 
   -- Spawn detached job

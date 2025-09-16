@@ -33,6 +33,8 @@ local state = {
   scriptPath = nil,
   hotReload = true,
   lastMTime = 0,
+  -- Whitelisted external library roots for sandboxed require (populated via --lib flags)
+  libPaths = {},
 
   -- Logging and errors
   log = {},

@@ -13,6 +13,18 @@ local function parse_args(args)
     local a = args[i]
     if a == '--script' and args[i+1] then
       state.scriptPath = args[i+1]; i = i + 2
+      -- default whitelist: directory of the script
+      if state.scriptPath then
+        local dir = state.scriptPath:match("^(.*)/[^/]+$")
+        if dir then
+          state.libPaths = state.libPaths or {}
+          table.insert(state.libPaths, dir)
+        end
+      end
+    elseif a == '--lib' and args[i+1] then
+      state.libPaths = state.libPaths or {}
+      table.insert(state.libPaths, args[i+1])
+      i = i + 2
     elseif a == '--detached' and args[i+1] then
       state.detached = { enabled = true, which = tostring(args[i+1]) }
       i = i + 2

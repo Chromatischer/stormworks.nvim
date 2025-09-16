@@ -193,10 +193,12 @@ function time.getDelta() end
 
 -- Lifecycle hooks provided by MC scripts
 
+---@alias MicrocontrollerConfig {tick?:number, tiles?:string|{x:integer,y:integer}, scale?:integer, debugCanvas?:boolean, debugCanvasSize?:{w:integer,h:integer}, properties?:table}
+
 --- Configure the microcontroller and editor environment
 --- Return a table such as:
 --- { tick = 60, tiles = "3x2" or {x=3,y=2}, scale = 2, debugCanvas = true, debugCanvasSize = { w=320, h=180 }, properties = { MyNumber = 1 } }
---- @return table config
+--- @return MicrocontrollerConfig config
 function onAttatch() end
 
 --- Called every simulation tick

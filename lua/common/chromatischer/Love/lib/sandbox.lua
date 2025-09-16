@@ -30,8 +30,47 @@ local function make_env()
   for k,v in pairs(safe_tables) do env[k] = v end
   -- Attach Stormworks-like API
   storm.bind_to_env(env)
-  -- Prevent access to os, io, debug, package, love, require by default
+  -- Prevent access to os, io, debug, package, love by default
   env._G = env
+
+  -- Provide a safe require that only loads Lua files from whitelisted folders (state.libPaths)
+  local loaded = {}
+  local function safe_require(modname)
+    if type(modname) ~= 'string' then return nil, 'module name must be a string' end
+    if loaded[modname] ~= nil then return loaded[modname] end
+    local rel = modname:gsub('%.', '/')
+    local tried = {}
+    for _,root in ipairs(state.libPaths or {}) do
+      -- Try root/rel.lua then root/rel/init.lua
+      local candidates = {
+        (root .. '/' .. rel .. '.lua'),
+        (root .. '/' .. rel .. '/init.lua'),
+      }
+      for _,cand in ipairs(candidates) do
+        local f = io.open(cand, 'rb')
+        if f then
+          local src = f:read('*a'); f:close()
+          local chunk, perr = load_chunk(src, '@'..cand, env)
+          if not chunk then
+            return error('error loading module '..modname..': '..tostring(perr))
+          end
+          local ok, ret = xpcall(chunk, debug.traceback)
+          if not ok then
+            error('error running module '..modname..': '..tostring(ret))
+          end
+          -- require semantics: if module returns a value, cache it; otherwise true
+          if ret == nil then ret = true end
+          loaded[modname] = ret
+          return ret
+        else
+          table.insert(tried, cand)
+        end
+      end
+    end
+    error("module '"..modname.."' not found in whitelisted lib paths. Tried: "..table.concat(tried, ', '))
+  end
+  env.require = safe_require
+  env.package = nil -- keep blocked
   return env
 end
 

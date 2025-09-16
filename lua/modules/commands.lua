@@ -30,9 +30,11 @@ function M.create_commands()
     elseif subcommand == "ui" then
       -- Run current buffer with the LÖVE2D UI
       -- Accept optional flags like: --tiles 3x2 --tick 60 --scale 3 --debug-canvas true --props k=v,k2=v2
+      -- Additionally, accepts repeated --lib <path> to whitelist import roots inside the simulator
       local args = opts.fargs
       local i = 2
       local runopts = {}
+      runopts.libs = {}
       while i <= #args do
         local a = args[i]
         local v = args[i+1]
@@ -44,6 +46,7 @@ function M.create_commands()
           runopts.debug_canvas = (s == "true" or s == "1" or s == "on")
           i = i + 2
         elseif a == "--props" and v then runopts.props = v; i = i + 2
+        elseif a == "--lib" and v then table.insert(runopts.libs, v); i = i + 2
         else i = i + 1 end
       end
       love_runner.run_current_script(runopts)
@@ -77,7 +80,7 @@ function M.create_commands()
 
       -- Basic flag completion for ui
       if parts[2] == "ui" then
-        local flags = { "--tiles", "--tick", "--scale", "--debug-canvas", "--props" }
+        local flags = { "--tiles", "--tick", "--scale", "--debug-canvas", "--props", "--lib" }
         local partial = parts[#parts] or ""
         return vim.tbl_filter(function(f)
           return f:find("^" .. vim.pesc(partial))

@@ -198,3 +198,5 @@ Current status:
 ## Contributing
 
 Issues and pull requests are welcome. If you’re proposing larger changes, please open an issue first to discuss the approach.
+
+  - Additionally supports multiple --lib <path> flags to whitelist module roots for 'require' inside the simulator. Defaults to including the script's directory, the project root, and bundled Common libraries.
