@@ -23,14 +23,16 @@ local function parse_args(args)
       state.tilesY = tonumber(y) or state.tilesY
       state.properties.screenTilesX = state.tilesX
       state.properties.screenTilesY = state.tilesY
+      if state.cliOverrides then state.cliOverrides.tiles = true end
       i = i + 2
     elseif a == '--tick' and args[i+1] then
-      state.tickRate = tonumber(args[i+1]) or state.tickRate; i = i + 2
+      state.tickRate = tonumber(args[i+1]) or state.tickRate; if state.cliOverrides then state.cliOverrides.tick = true end; i = i + 2
     elseif a == '--scale' and args[i+1] then
-      state.gameCanvasScale = tonumber(args[i+1]) or state.gameCanvasScale; i = i + 2
+      state.gameCanvasScale = tonumber(args[i+1]) or state.gameCanvasScale; if state.cliOverrides then state.cliOverrides.scale = true end; i = i + 2
     elseif a == '--debug-canvas' and args[i+1] then
       local v = tostring(args[i+1])
       state.debugCanvasEnabled = (v == 'true' or v == '1' or v == 'on')
+      if state.cliOverrides then state.cliOverrides.debugCanvas = true end
       i = i + 2
     elseif a == '--props' and args[i+1] then
       local s = args[i+1]
@@ -82,8 +84,9 @@ function love.load(args)
   state.fonts.mono = love.graphics.newFont(13)
   love.graphics.setFont(state.fonts.ui)
 
-  canvases.recreateAll()
+  -- Load user script before creating canvases so onAttatch() can configure sizes
   sandbox.load_script()
+  canvases.recreateAll()
   hot.init(state)
   detach.init()
 
@@ -125,7 +128,10 @@ function love.update(dt)
   end
   -- Hot reload check
   if state.hotReload and hot.update(state, dt) then
-    sandbox.reload()
+    local ok = sandbox.reload()
+    if ok then
+      canvases.recreateAll()
+    end
   end
 
   local step_dt = 1 / (state.tickRate>0 and state.tickRate or 60)
@@ -242,7 +248,7 @@ function love.keypressed(key)
   end
   if key == 'space' then state.running = not state.running
   elseif key == 'n' then state.singleStep = true
-  elseif key == 'r' then sandbox.reload()
+  elseif key == 'r' then local ok = sandbox.reload(); if ok then canvases.recreateAll() end
   elseif key == '=' or key == '+' then state.gameCanvasScale = math.min(8, state.gameCanvasScale+1)
   elseif key == '-' then state.gameCanvasScale = math.max(1, state.gameCanvasScale-1)
   elseif key == 'd' then state.debugCanvasEnabled = not state.debugCanvasEnabled; canvases.recreateAll()

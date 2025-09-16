@@ -3,9 +3,7 @@ local state = require('lib.state')
 local logger = require('lib.logger')
 local storm = require('lib.storm_api')
 
-local sandbox = {
-  env = nil,
-}
+local sandbox = { env = nil }
 
 local safe_globals = {
   "assert","error","ipairs","next","pairs","pcall","select","tonumber","tostring","type","unpack","xpcall","print",
@@ -68,6 +66,49 @@ function sandbox.load_script()
     return false, runerr
   end
   sandbox.env = env
+  -- If the MC defines onAttatch (note: spelled as requested), allow it to configure runtime
+  if type(env.onAttatch) == 'function' then
+    local okAttach, cfgOrErr = xpcall(env.onAttatch, debug.traceback)
+    if not okAttach then
+      logger.append("[error] onAttatch: " .. tostring(cfgOrErr))
+    else
+      local cfg = cfgOrErr
+      if type(cfg) == 'table' then
+        -- Expected shape: { tick=number, tiles={x=int,y=int} | tiles="3x2", scale=int, debugCanvas=bool, properties=table }
+        -- Respect CLI overrides if present
+        local overrides = state.cliOverrides or {}
+        if cfg.tick and not overrides.tick then state.tickRate = tonumber(cfg.tick) or state.tickRate end
+        if cfg.scale and not overrides.scale then state.gameCanvasScale = tonumber(cfg.scale) or state.gameCanvasScale end
+        if cfg.debugCanvas ~= nil and not overrides.debugCanvas then state.debugCanvasEnabled = not not cfg.debugCanvas end
+        -- tiles
+        if not overrides.tiles and cfg.tiles then
+          if type(cfg.tiles) == 'string' then
+            local x,y = tostring(cfg.tiles):match('^(%d+)%D+(%d+)$')
+            if x and y then
+              state.tilesX = tonumber(x) or state.tilesX
+              state.tilesY = tonumber(y) or state.tilesY
+            end
+          elseif type(cfg.tiles) == 'table' then
+            if tonumber(cfg.tiles.x) then state.tilesX = tonumber(cfg.tiles.x) end
+            if tonumber(cfg.tiles.y) then state.tilesY = tonumber(cfg.tiles.y) end
+          end
+          state.properties.screenTilesX = state.tilesX
+          state.properties.screenTilesY = state.tilesY
+        end
+        -- Optional debug canvas size
+        if cfg.debugCanvasSize and type(cfg.debugCanvasSize) == 'table' then
+          if tonumber(cfg.debugCanvasSize.w) then state.debugCanvasW = tonumber(cfg.debugCanvasSize.w) end
+          if tonumber(cfg.debugCanvasSize.h) then state.debugCanvasH = tonumber(cfg.debugCanvasSize.h) end
+        end
+        -- Properties passthrough
+        if type(cfg.properties) == 'table' then
+          for k,v in pairs(cfg.properties) do state.properties[k] = v end
+        end
+      else
+        logger.append('[warn] onAttatch did not return a table; ignoring')
+      end
+    end
+  end
   logger.append(string.format("[info] Loaded %s", state.scriptPath))
   return true
 end

@@ -50,6 +50,14 @@ local state = {
     enabled = false,
     which = nil, -- 'game' or 'debug'
   },
+
+  -- Track which settings were overridden via CLI flags so onAttatch config can respect them
+  cliOverrides = {
+    tiles = false,
+    tick = false,
+    scale = false,
+    debugCanvas = false,
+  },
 }
 
 for i=1,32 do

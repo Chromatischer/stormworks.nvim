@@ -1,6 +1,22 @@
 -- Example Stormworks-like microcontroller script
 -- Save as Love/example/mc_sample.lua and run:
---   love Love/ --script Love/example/mc_sample.lua --tiles 3x2 --tick 60 --scale 4 --debug-canvas true
+--   love Love/ --script Love/example/mc_sample.lua
+-- Flags like --tiles/--tick/--scale are optional now; onAttatch() can configure them.
+
+---@alias MicrocontrollerConfig {tick?:number, tiles?:string|{x:integer,y:integer}, scale?:integer, debugCanvas?:boolean, debugCanvasSize?:{w:integer,h:integer}, properties?:table}
+
+-- New optional configuration hook; returned values override defaults (but not explicit CLI flags)
+---@return MicrocontrollerConfig
+function onAttatch()
+  return {
+    tick = 30,
+    tiles = {x=4, y=3},
+    scale = 3,
+    debugCanvas = true,
+    debugCanvasSize = {w=400, h=300},
+    properties = { showGrid = true }
+  }
+end
 
 local t = 0
 

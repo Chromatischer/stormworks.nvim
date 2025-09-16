@@ -14,7 +14,7 @@ end
 
 -- Hardcoded standard library path (relative to plugin directory)
 local STANDARD_LIB_PATH = get_plugin_directory() .. "../common/nameouschangey/MicroController/microcontroller.lua"
-local DEBUG_LIB_PATH    = get_plugin_directory() .. "../common/chromatischer/Debug/debug.lua"
+local LOVE_LIB_PATH = get_plugin_directory() .. "../common/chromatischer/LspHinting/love.lua"
 
 -- Utility function to check if file exists
 local function file_exists(path)
@@ -125,7 +125,7 @@ function M.setup_project_libraries()
     error("StdLib not found at: " .. std_lib)
   end
   -- Add debug canvas API stubs for IntelliSense
-  local dbg_lib = vim.fn.expand(DEBUG_LIB_PATH)
+  local dbg_lib = vim.fn.expand(LOVE_LIB_PATH)
   if file_exists(dbg_lib) then
     table.insert(config.project_libs, dbg_lib)
     print("✓ Added debug library: " .. dbg_lib)
