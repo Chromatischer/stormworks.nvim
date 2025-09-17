@@ -5,6 +5,17 @@ local storm = require('lib.storm_api')
 
 local sandbox = { env = nil, sim = nil }
 
+-- Helper: temporarily allow setmetatable within the sandbox env for specific phases
+-- Only enabled during: onAttatch(), simulator onInit/onTick/onDebugDraw
+local function with_setmetatable(fn, ...)
+  local e = sandbox.env
+  local had, prev = false, nil
+  if e then prev = e.setmetatable; had = prev ~= nil; e.setmetatable = _G.setmetatable end
+  local ok, res = xpcall(fn, debug.traceback, ...)
+  if e then if had then e.setmetatable = prev else e.setmetatable = nil end end
+  return ok, res
+end
+
 local safe_globals = {
   "assert","error","ipairs","next","pairs","pcall","select","tonumber","tostring","type","unpack","xpcall","print",
 }
@@ -165,7 +176,8 @@ function sandbox.load_script()
   sandbox.sim = nil -- clear any previous simulator on fresh load
   -- If the MC defines onAttatch (note: spelled as requested), allow it to configure runtime
   if type(env.onAttatch) == 'function' then
-    local okAttach, cfgOrErr = xpcall(env.onAttatch, debug.traceback)
+    -- Allow setmetatable during onAttatch (and any require calls inside it)
+    local okAttach, cfgOrErr = with_setmetatable(env.onAttatch)
     if not okAttach then
       logger.append("[error] onAttatch: " .. tostring(cfgOrErr))
     else
@@ -249,7 +261,7 @@ function sandbox.load_script()
             sandbox.sim = { hooks = hooks, ctx = sim_ctx, cfg = cfg.input_simulator_config }
             -- Initialize simulator if it exposes onInit
             if type(hooks.onInit) == 'function' then
-              local okSim, errSim = xpcall(function() hooks.onInit(sim_ctx, cfg.input_simulator_config) end, debug.traceback)
+              local okSim, errSim = with_setmetatable(function() return hooks.onInit(sim_ctx, cfg.input_simulator_config) end)
               if not okSim then
                 logger.append('[error] input_simulator onInit: '..tostring(errSim))
                 if state.pauseOnError then state.running = false end
@@ -284,7 +296,7 @@ end
 function sandbox.tick()
   -- 1) Simulator tick (pre-user)
   if sandbox.sim and sandbox.sim.hooks and type(sandbox.sim.hooks.onTick) == 'function' then
-    local okSim, errSim = xpcall(function() return sandbox.sim.hooks.onTick(sandbox.sim.ctx) end, debug.traceback)
+    local okSim, errSim = with_setmetatable(function() return sandbox.sim.hooks.onTick(sandbox.sim.ctx) end)
     if not okSim then
       logger.append('[error] input_simulator onTick: '..tostring(errSim))
       state.lastError = errSim
@@ -298,6 +310,15 @@ end
 
 function sandbox.draw()
   -- Drawing must occur with canvases bound; handled in storm.draw_user_onDraw
+  -- Allow setmetatable within simulator onDebugDraw if present
+  if sandbox.sim and sandbox.sim.hooks and type(sandbox.sim.hooks.onDebugDraw) == 'function' then
+    local okSim, errSim = with_setmetatable(function() return sandbox.sim.hooks.onDebugDraw(sandbox.sim.ctx) end)
+    if not okSim then
+      logger.append('[error] input_simulator onDebugDraw: '..tostring(errSim))
+      state.lastError = errSim
+      if state.pauseOnError then state.running = false end
+    end
+  end
   return safe_call('onDraw')
 end
 
