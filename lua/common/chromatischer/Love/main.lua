@@ -277,7 +277,7 @@ function love.draw()
             logger.append('[error] onDebugDraw: '..tostring(err))
           end
         end
-      end
+      end)
       love.graphics.setCanvas(canvas_prev)
       if dbgPanel and dbgPanel.x then
         love.graphics.push(); love.graphics.translate(dbgPanel.x, dbgPanel.y)
