@@ -180,6 +180,8 @@ function sandbox.load_script()
     local okAttach, cfgOrErr = with_setmetatable(env.onAttatch)
     if not okAttach then
       logger.append("[error] onAttatch: " .. tostring(cfgOrErr))
+      state.lastError = cfgOrErr
+      if state.pauseOnError then state.running = false end
     else
       local cfg = cfgOrErr
       if type(cfg) == 'table' then
@@ -264,6 +266,7 @@ function sandbox.load_script()
               local okSim, errSim = with_setmetatable(function() return hooks.onInit(sim_ctx, cfg.input_simulator_config) end)
               if not okSim then
                 logger.append('[error] input_simulator onInit: '..tostring(errSim))
+                state.lastError = errSim
                 if state.pauseOnError then state.running = false end
               end
             end

@@ -130,7 +130,13 @@ function love.load(args)
   love.graphics.setFont(state.fonts.ui)
 
   -- Load user script before creating canvases so onAttatch() can configure sizes
-  sandbox.load_script()
+  do
+    local ok, err = sandbox.load_script()
+    if not ok then
+      logger.append('[error] load_script failed: '..tostring(err))
+      -- keep running; UI will show error
+    end
+  end
   canvases.recreateAll()
   hot.init(state)
   detach.init()
@@ -271,7 +277,7 @@ function love.draw()
             logger.append('[error] onDebugDraw: '..tostring(err))
           end
         end
-      end)
+      end
       love.graphics.setCanvas(canvas_prev)
       if dbgPanel and dbgPanel.x then
         love.graphics.push(); love.graphics.translate(dbgPanel.x, dbgPanel.y)
