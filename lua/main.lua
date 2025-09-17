@@ -25,23 +25,6 @@ M.setup_autodetection = commands.setup_autodetection
 M.run_love_ui = love_runner.run_current_script
 M.register_keymaps = keys.register_keymaps
 
-  -- Auto-load VSCode-style snippets for LuaSnip (if available)
-  pcall(function()
-    local ok, loader = pcall(require, 'luasnip.loaders.from_vscode')
-    if not (ok and loader and loader.lazy_load) then return end
-    local src = debug.getinfo(1, 'S').source or ''
-    if src:sub(1,1) == '@' then src = src:sub(2) end
-    -- This file is .../lua/sw-micro-project/lua/main.lua
-    local script_dir = src:match('(.*/)') or ''
-    -- plugin root = .../lua/sw-micro-project/
-    local plugin_root = script_dir .. '../'
-    -- normalize any /segment/../
-    plugin_root = plugin_root:gsub('/%./', '/'):gsub('/[^/]+/%.%./', '/'):gsub('/[^/]+/%.%./', '/')
-    local snippets_dir = plugin_root .. 'snippets'
-    loader.lazy_load({ paths = { snippets_dir } })
-  end)
-
-
 -- Setup function called by user in their config
 function M.setup(user_config)
   -- Setup configuration
@@ -55,6 +38,12 @@ function M.setup(user_config)
 
   -- Register default keymaps and which-key group if available
   keys.register_keymaps()
+
+  -- Load LuaSnip snippets from JSON dynamically (safe if LuaSnip missing)
+  local ok, err = pcall(require, "sw-micro-project.snippets.snippets")
+  if not ok and vim and vim.notify then
+    vim.notify("sw-micro-project: snippets not loaded: " .. tostring(err), (vim.log and vim.log.levels and vim.log.levels.WARN) or 3)
+  end
 end
 
 return M
