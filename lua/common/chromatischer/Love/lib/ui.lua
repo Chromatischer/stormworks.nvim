@@ -60,6 +60,10 @@ ui.leftTab = "inputs" -- for merged mode (Inputs | Outputs)
 ui._hoverTip = nil
 ui.minimized = { inputs = false, outputs = false, game = false, debug = false, log = false }
 
+-- Absolute on-screen rectangles of canvases (for hit testing)
+-- { game = { x,y,w,h, scale }, debug = { x,y,w,h, scale } }
+ui._canvasRects = { game = nil, debug = nil }
+
 local function set_tooltip(text)
   if not text or text == "" then
     return
@@ -689,6 +693,7 @@ function ui.draw_game_canvas()
   local p = ui.panels.game
   if ui.minimized.game then
     draw_collapsed_horizontal(p, "game", "Game")
+    ui._canvasRects.game = nil
     return { x = p.x + 8, y = p.y + NAV_H + 8 }
   end
   draw_panel(p)
@@ -696,22 +701,46 @@ function ui.draw_game_canvas()
   -- inner rect where canvas is drawn
   local cx = p.x + 8
   local cy = p.y + NAV_H + 8
+  -- cache rect for hit testing
+  local gw = state.tilesX * state.tileSize
+  local gh = state.tilesY * state.tileSize
+  ui._canvasRects.game = {
+    x = cx,
+    y = cy,
+    w = gw * state.gameCanvasScale,
+    h = gh * state.gameCanvasScale,
+    scale = state.gameCanvasScale,
+  }
   return { x = cx, y = cy }
 end
 
 function ui.draw_debug_canvas_center()
   local p = ui.panels.debug_center
   if p.h <= 0 then
+    ui._canvasRects.debug = nil
     return { x = p.x + 8, y = p.y + NAV_H + 8 }
   end
   if ui.minimized.debug then
     draw_collapsed_horizontal(p, "debug", "Debug")
+    ui._canvasRects.debug = nil
     return { x = p.x + 8, y = p.y + NAV_H + 8 }
   end
   draw_panel(p)
   draw_nav_bar(p, "Debug", "debug")
   local cx = p.x + 8
   local cy = p.y + NAV_H + 8
+  -- cache rect for hit testing
+  if state.debugCanvasEnabled then
+    ui._canvasRects.debug = {
+      x = cx,
+      y = cy,
+      w = state.debugCanvasW * state.debugCanvasScale,
+      h = state.debugCanvasH * state.debugCanvasScale,
+      scale = state.debugCanvasScale,
+    }
+  else
+    ui._canvasRects.debug = nil
+  end
   return { x = cx, y = cy }
 end
 
@@ -764,6 +793,31 @@ function ui.draw_log(logger)
 end
 
 function ui.mousepressed(mx, my, button)
+  -- Update canvas touch state for game/debug on any mouse button
+  local function update_touch(which)
+    local rect = ui._canvasRects and ui._canvasRects[which]
+    local t = state.touch and state.touch[which]
+    if not t then return end
+    if rect then
+      local inside = (mx >= rect.x and my >= rect.y and mx < rect.x + rect.w and my < rect.y + rect.h)
+      t.inside = inside
+      local scale = rect.scale or 1
+      local lx = math.floor((mx - rect.x) / scale)
+      local ly = math.floor((my - rect.y) / scale)
+      if lx < 0 then lx = 0 end; if ly < 0 then ly = 0 end
+      local maxx = math.max(0, math.floor(rect.w / scale) - 1)
+      local maxy = math.max(0, math.floor(rect.h / scale) - 1)
+      t.x = math.min(maxx, lx)
+      t.y = math.min(maxy, ly)
+      if button == 1 then t.left = inside and true or false end
+      if button == 2 then t.right = inside and true or false end
+    else
+      t.inside = false
+    end
+  end
+  update_touch('game')
+  if state.debugCanvasEnabled then update_touch('debug') end
+
   if button ~= 1 then
     return
   end
@@ -839,12 +893,65 @@ function ui.mousepressed(mx, my, button)
 end
 
 function ui.mousereleased(mx, my, button)
+  -- Update touch release for canvas areas
+  local function update_release(which)
+    local rect = ui._canvasRects and ui._canvasRects[which]
+    local t = state.touch and state.touch[which]
+    if not t then return end
+    if rect then
+      local inside = (mx >= rect.x and my >= rect.y and mx < rect.x + rect.w and my < rect.y + rect.h)
+      t.inside = inside
+      local scale = rect.scale or 1
+      local lx = math.floor((mx - rect.x) / scale)
+      local ly = math.floor((my - rect.y) / scale)
+      if lx < 0 then lx = 0 end; if ly < 0 then ly = 0 end
+      local maxx = math.max(0, math.floor(rect.w / scale) - 1)
+      local maxy = math.max(0, math.floor(rect.h / scale) - 1)
+      t.x = math.min(maxx, lx)
+      t.y = math.min(maxy, ly)
+    else
+      t.inside = false
+    end
+    if button == 1 then t.left = false end
+    if button == 2 then t.right = false end
+  end
+  update_release('game')
+  if state.debugCanvasEnabled then update_release('debug') end
+
   if button == 1 then
     ui._activeSlider = nil
   end
 end
 
 function ui.mousemoved(mx, my, dx, dy)
+  -- Track pointer movement over canvases
+  local function update_move(which)
+    local rect = ui._canvasRects and ui._canvasRects[which]
+    local t = state.touch and state.touch[which]
+    if not t then return end
+    if rect then
+      local inside = (mx >= rect.x and my >= rect.y and mx < rect.x + rect.w and my < rect.y + rect.h)
+      t.inside = inside
+      local scale = rect.scale or 1
+      local lx = math.floor((mx - rect.x) / scale)
+      local ly = math.floor((my - rect.y) / scale)
+      if lx < 0 then lx = 0 end; if ly < 0 then ly = 0 end
+      local maxx = math.max(0, math.floor(rect.w / scale) - 1)
+      local maxy = math.max(0, math.floor(rect.h / scale) - 1)
+      t.x = math.min(maxx, lx)
+      t.y = math.min(maxy, ly)
+      -- reflect current button held state only when inside rect
+      t.left = inside and love.mouse.isDown(1) or false
+      t.right = inside and love.mouse.isDown(2) or false
+    else
+      t.inside = false
+      t.left = false
+      t.right = false
+    end
+  end
+  update_move('game')
+  if state.debugCanvasEnabled then update_move('debug') end
+
   if ui._activeSlider then
     local i = ui._activeSlider.idx
     local rect = ui._activeSlider.rect

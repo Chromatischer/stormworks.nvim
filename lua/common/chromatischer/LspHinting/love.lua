@@ -210,26 +210,3 @@ function onDraw() end
 
 --- Draw to the debug canvas (if enabled)
 function onDebugDraw() end
-
---------------------------------------------------------------------------------
--- Input Simulator LSP Hinting (types only)
---------------------------------------------------------------------------------
-
----@class SimulatorInputCtx
----@field setBool fun(ch: integer, v: boolean)
----@field setNumber fun(ch: integer, v: number)
----@field getBool fun(ch: integer): boolean
----@field getNumber fun(ch: integer): number
-
----@class SimulatorTimeCtx
----@field getDelta fun(): number
-
----@class SimulatorCtx
----@field input SimulatorInputCtx
----@field properties table<string, any>
----@field time SimulatorTimeCtx
-
----@class InputSimulatorTable
----@field onInit fun(ctx: SimulatorCtx, cfg: table|nil)|nil
----@field onTick fun(ctx: SimulatorCtx)
----@field onDebugDraw fun()|nil
