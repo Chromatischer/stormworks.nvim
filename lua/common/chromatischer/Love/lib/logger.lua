@@ -13,10 +13,18 @@ end
 
 function logger.append(text)
   append_line(text)
+  -- Echo to console as well, so crashes during attach or simulator phases are visible in terminal
+  if type(text) ~= 'string' then text = tostring(text) end
+  if text and #text > 0 then
+    -- use original print to avoid recursion with print-capture
+    if orig_print then orig_print(text) end
+  end
 end
 
 function logger.printf(fmt, ...)
-  append_line(string.format(fmt, ...))
+  local line = string.format(fmt, ...)
+  append_line(line)
+  if orig_print then orig_print(line) end
 end
 
 function logger.getLines(max)

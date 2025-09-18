@@ -39,9 +39,26 @@ function M.build_micro_project(single_file)
   -- Get build parameters
   local build_params = project.get_build_params(config.current_project.config)
 
-  local lib_include_paths = { LifeBoatAPI.Tools.Filepath:new(config.current_project.path) }
-  for _, path in ipairs(config.current_project.config.libraries) do
-    table.insert(lib_include_paths, LifeBoatAPI.Tools.Filepath:new(path))
+  -- Build include roots for the combiner
+  -- Include project root, each configured library path, and the parent dir of each path
+  local lib_include_paths = {}
+  local seen = {}
+  local function add_root(p)
+    if not p or p == '' then return end
+    -- normalize to absolute
+    local abs = vim.fn.fnamemodify(p, ":p"):gsub("/$", "")
+    if not seen[abs] and vim.uv.fs_stat(abs) and vim.uv.fs_stat(abs).type == 'directory' then
+      seen[abs] = true
+      print("Dir added: " .. abs)
+      table.insert(lib_include_paths, LifeBoatAPI.Tools.Filepath:new(abs))
+    end
+  end
+
+  add_root(config.current_project.path)
+  for _, path in ipairs(config.current_project.config.libraries or {}) do
+    add_root(path)
+    local parent = vim.fn.fnamemodify(path, ":h")
+    add_root(parent)
   end
 
   -- Initialize the builder

@@ -1,0 +1,71 @@
+{
+  "onAttatch": {
+    "prefix": ["sw.onattatch", "onattatch"],
+    "description": "Stormworks onAttatch() config stub including input simulator",
+    "body": [
+      "---@return MicrocontrollerConfig & { input_simulator?: InputSimulator, input_simulator_config?: table }",
+      "function onAttatch()",
+      "  return {",
+      "    tick = ${1:60},",
+      "    tiles = \"${2:3x2}\",",
+      "    scale = ${3:3},",
+      "    debugCanvas = ${4:true},",
+      "    debugCanvasSize = { w = ${5:320}, h = ${6:120} },",
+      "    properties = { ${7:MyNumber} = ${8:1} },",
+      "    -- Attach an input simulator (function-form or table-form module)",
+      "    ---@type InputSimulator",
+      "    input_simulator = require('${9:simulators.my_sim}'),",
+      "    input_simulator_config = { ${10:key} = ${11:value} }",
+      "  }",
+      "end"
+    ]
+  },
+  "simulator_function": {
+    "prefix": ["sw.sim.func", "sim.func"],
+    "description": "Stormworks simulator (function-form)",
+    "body": [
+      "-- ${1:simulators/my_sim.lua}",
+      "---@param ctx SimulatorCtx",
+      "return function(ctx)",
+      "  -- Runs before microcontroller onTick()",
+      "  -- Write inputs:",
+      "  ctx.input.setBool(${2:1}, ${3:true})",
+      "  ctx.input.setNumber(${4:1}, ${5:0.5})",
+      "end"
+    ]
+  },
+  "simulator_table": {
+    "prefix": ["sw.sim.table", "sim.table"],
+    "description": "Stormworks simulator (table-form with onInit/onTick/onDebugDraw)",
+    "body": [
+      "-- ${1:simulators/my_adv_sim.lua}",
+      "---@class ${2:MyAdvSim} : InputSimulatorTable",
+      "local M = { t = 0 }",
+      "",
+      "---@param ctx SimulatorCtx",
+      "---@param cfg table|nil",
+      "function M.onInit(ctx, cfg)",
+      "  M.freq = (cfg and tonumber(cfg.freq_hz)) or ${3:1.0}",
+      "  M.chN  = (cfg and tonumber(cfg.num_ch))  or ${4:1}",
+      "  M.chB  = (cfg and tonumber(cfg.bool_ch)) or ${5:1}",
+      "end",
+      "",
+      "---@param ctx SimulatorCtx",
+      "function M.onTick(ctx)",
+      "  local dt = ctx.time.getDelta()",
+      "  M.t = M.t + dt",
+      "  local v = math.sin(2*math.pi*M.freq*M.t)",
+      "  ctx.input.setNumber(M.chN, v)",
+      "  ctx.input.setBool(M.chB, v > 0)",
+      "end",
+      "",
+      "function M.onDebugDraw()",
+      "  dbg.setColor(0,255,0)",
+      "  local w,h = dbg.getWidth(), dbg.getHeight()",
+      "  dbg.drawLine(w/2-10, h/2, w/2+10, h/2)",
+      "end",
+      "",
+      "return M"
+    ]
+  }
+}

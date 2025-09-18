@@ -33,6 +33,8 @@ local state = {
   scriptPath = nil,
   hotReload = true,
   lastMTime = 0,
+  -- Whitelisted external library roots for sandboxed require (populated via --lib flags)
+  libPaths = {},
 
   -- Logging and errors
   log = {},
@@ -49,6 +51,14 @@ local state = {
   detached = {
     enabled = false,
     which = nil, -- 'game' or 'debug'
+  },
+
+  -- Track which settings were overridden via CLI flags so onAttatch config can respect them
+  cliOverrides = {
+    tiles = false,
+    tick = false,
+    scale = false,
+    debugCanvas = false,
   },
 }
 
