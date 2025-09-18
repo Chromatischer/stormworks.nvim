@@ -42,7 +42,10 @@ function M.setup(user_config)
   -- Load LuaSnip snippets from JSON dynamically (safe if LuaSnip missing)
   local ok, err = pcall(require, "sw-micro-project.snippets.snippets")
   if not ok and vim and vim.notify then
-    vim.notify("sw-micro-project: snippets not loaded: " .. tostring(err), (vim.log and vim.log.levels and vim.log.levels.WARN) or 3)
+    vim.notify(
+      "sw-micro-project: snippets not loaded: " .. tostring(err),
+      (vim.log and vim.log.levels and vim.log.levels.WARN) or 3
+    )
   end
 end
 
