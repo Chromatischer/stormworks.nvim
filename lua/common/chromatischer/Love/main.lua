@@ -9,6 +9,7 @@ local detach = require("lib.detach")
 
 local function parse_args(args)
   local i = 1
+  local log_truncate = false
   while i <= #args do
     local a = args[i]
     if a == "--script" and args[i + 1] then
@@ -35,6 +36,32 @@ local function parse_args(args)
       table.insert(state.libPaths, p)
       print("Added lib root from CLI: " .. tostring(p))
       i = i + 2
+    elseif a == "--log-file" and args[i + 1] then
+      local p = args[i + 1]
+      if type(p) == "string" and p:sub(1, 1) == "~" then
+        local home = os and os.getenv and os.getenv("HOME") or nil
+        if home then p = home .. p:sub(2) end
+      end
+      local ok, err = logger.enable_file(p, { truncate = log_truncate })
+      if not ok then
+        print("[logger] failed to enable file logging: " .. tostring(err))
+      else
+        print("[logger] writing to " .. tostring(p))
+      end
+      i = i + 2
+    elseif a == "--log-truncate" then
+      log_truncate = true
+      -- If a file is already open, re-open in truncate mode
+      local current = logger.get_file_path and logger.get_file_path() or nil
+      if current then
+        local ok, err = logger.enable_file(current, { truncate = true })
+        if not ok then
+          print("[logger] failed to truncate log file: " .. tostring(err))
+        else
+          print("[logger] truncated log file: " .. tostring(current))
+        end
+      end
+      i = i + 1
     elseif a == "--detached" and args[i + 1] then
       state.detached = { enabled = true, which = tostring(args[i + 1]) }
       i = i + 2

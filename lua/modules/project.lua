@@ -31,16 +31,28 @@ end
 
 -- Function to detect if current directory is a microcontroller project
 function M.detect_micro_project()
-  local cwd = vim.fn.getcwd()
+  -- Prefer searching from current buffer's directory; fallback to CWD
+  local buf = vim.api and vim.api.nvim_buf_get_name and vim.api.nvim_buf_get_name(0) or ""
+  local start_dir = (buf and #buf > 0) and vim.fn.fnamemodify(buf, ":p:h") or vim.fn.getcwd()
 
-  for _, marker in ipairs(config.config.project_markers) do
-    local marker_path = cwd .. "/" .. marker
-    if file_exists(marker_path) then
-      return marker_path, marker
-    end
+  local function parent_dir(path)
+    local p = path:gsub("/+$", "")
+    local parent = p:match("^(.*)/[^/]+$")
+    return parent
   end
-
-  return nil, nil
+  local dir = start_dir
+  while dir and #dir > 0 do
+    for _, marker in ipairs(config.config.project_markers) do
+      local marker_path = dir .. "/" .. marker
+      if file_exists(marker_path) then
+        return marker_path, marker, dir
+      end
+    end
+    local up = parent_dir(dir)
+    if not up or up == dir then break end
+    dir = up
+  end
+  return nil, nil, nil
 end
 
 -- Function to mark current project as microcontroller project
@@ -83,9 +95,9 @@ function M.mark_as_micro_project()
 end
 
 -- Function to load project configuration
-local function load_project_config()
-  local cwd = vim.fn.getcwd()
-  local config_path = cwd .. "/.microproject"
+local function load_project_config(project_root)
+  local base = project_root or (config.current_project and config.current_project.path) or vim.fn.getcwd()
+  local config_path = base .. "/.microproject"
 
   if file_exists(config_path) then
     -- Safely load the project config
@@ -100,7 +112,7 @@ end
 
 -- Function to setup libraries for the current project
 function M.setup_project_libraries()
-  local marker_path, marker_type = M.detect_micro_project()
+  local marker_path, marker_type, project_root = M.detect_micro_project()
 
   if not marker_path then
     print("Not a microcontroller project. Run :MarkAsMicroProject first.")
@@ -108,9 +120,9 @@ function M.setup_project_libraries()
   end
 
   config.current_project = {
-    path = vim.fn.getcwd(),
+    path = project_root,
     marker = marker_type,
-    config = load_project_config(),
+    config = load_project_config(project_root),
   }
 
   -- Clear existing project libraries
@@ -214,8 +226,9 @@ function M.add_library(lib_path)
   table.insert(config.project_libs, expanded_path)
 
   -- Save to project config file
-  local config_path = vim.fn.getcwd() .. "/.microproject"
-  local project_config = load_project_config()
+  local project_root = assert(config.current_project and config.current_project.path, "No active project root")
+  local config_path = project_root .. "/.microproject"
+  local project_config = load_project_config(project_root)
   project_config.libraries = project_config.libraries or {}
   table.insert(project_config.libraries, expanded_path)
 
