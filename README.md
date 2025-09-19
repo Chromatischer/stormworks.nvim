@@ -57,7 +57,7 @@ Note: The runtime module name is `sw-micro-project`. Setting `main = "sw-micro-p
 4) Run the LÖVE2D UI against the current buffer:
 
 ```vim
-:MicroProject ui [--tiles 3x2] [--tick 60] [--scale 3] [--debug-canvas true] [--props k=v,k2=v2]
+:MicroProject ui [--tiles 3x2] [--tick 60] [--scale 3] [--debug-canvas true] [--props k=v,k2=v2] [--log-file /path/to/log.txt] [--log-truncate]
 ```
 
 - --tiles: grid of Stormworks screens, e.g. 3x2

@@ -21,6 +21,12 @@ local state = {
   debugCanvasH = 512,
   debugCanvasScale = 1,
 
+  -- Pointer/touch state for canvases (updated by UI events)
+  touch = {
+    game = { x = 0, y = 0, left = false, right = false, inside = false },
+    debug = { x = 0, y = 0, left = false, right = false, inside = false },
+  },
+
   -- Ticking
   tickRate = 60,
   running = true,

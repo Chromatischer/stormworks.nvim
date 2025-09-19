@@ -49,11 +49,19 @@ local function build_args(opts)
   if opts.scale then table.insert(args, "--scale"); table.insert(args, tostring(opts.scale)) end
   if opts.debug_canvas ~= nil then table.insert(args, "--debug-canvas"); table.insert(args, opts.debug_canvas and "true" or "false") end
   if opts.props then table.insert(args, "--props"); table.insert(args, opts.props) end
+  if opts.log_file then table.insert(args, "--log-file"); table.insert(args, tostring(opts.log_file)) end
+  if opts.log_truncate then table.insert(args, "--log-truncate") end
   return args
 end
 
 function M.run_current_script(opts)
   opts = opts or {}
+  -- Default log file path if none provided: ./sw-micro/sw-micro.log (relative to cwd)
+  if not opts.log_file then
+    local cwd = vim.loop.cwd()
+    local default_log_dir = path_join(cwd, "sw-micro")
+    opts.log_file = path_join(default_log_dir, "sw-micro.log")
+  end
   -- Determine current buffer file
   local bufname = vim.api.nvim_buf_get_name(0)
   if bufname == nil or bufname == "" then
@@ -79,17 +87,17 @@ function M.run_current_script(opts)
     return
   end
 
-  -- Ensure project libraries are initialized if a .microproject exists
-  if (not config.current_project or not config.project_libs or #config.project_libs == 0) then
+  -- Ensure project libraries and current_project are initialized/refreshed
+  do
     local ok_detect, marker_path = pcall(project.detect_micro_project)
     if ok_detect and marker_path then
       pcall(project.setup_project_libraries)
     end
   end
 
-  -- Provide default lib search roots for the simulator: project root and common libs
+  -- Provide default lib search roots for the simulator: project root (project.current_project.path) and common libs
   local libs = {}
-  local proj_root = vim.loop.cwd()
+  local proj_root = (config.current_project and config.current_project.path) or vim.loop.cwd()
   table.insert(libs, proj_root)
   -- Also include LifeBoatAPI and any 'Common' folder next to the script, if present
   local lua_dir = get_plugin_directory():gsub("/modules/?$", "/")
@@ -134,7 +142,7 @@ function M.run_current_script(opts)
   if ok <= 0 then
     vim.notify("Failed to start LÖVE2D UI (jobstart error)", vim.log.levels.ERROR)
   else
-    vim.notify("Started LÖVE2D UI for " .. script_path, vim.log.levels.INFO)
+    vim.notify("Started LÖVE2D UI for " .. script_path .. " (logging to " .. tostring(opts.log_file) .. ")", vim.log.levels.INFO)
   end
 end
 

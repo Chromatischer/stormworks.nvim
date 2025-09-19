@@ -30,6 +30,7 @@ function M.create_commands()
     elseif subcommand == "ui" then
       -- Run current buffer with the LÖVE2D UI
       -- Accept optional flags like: --tiles 3x2 --tick 60 --scale 3 --debug-canvas true --props k=v,k2=v2
+      -- New logging flags: --log-file /path/to/log.txt [--log-truncate]
       -- Additionally, accepts repeated --lib <path> to whitelist import roots inside the simulator
       local args = opts.fargs
       local i = 2
@@ -46,6 +47,8 @@ function M.create_commands()
           runopts.debug_canvas = (s == "true" or s == "1" or s == "on")
           i = i + 2
         elseif a == "--props" and v then runopts.props = v; i = i + 2
+        elseif a == "--log-file" and v then runopts.log_file = v; i = i + 2
+        elseif a == "--log-truncate" then runopts.log_truncate = true; i = i + 1
         elseif a == "--lib" and v then table.insert(runopts.libs, v); i = i + 2
         else i = i + 1 end
       end
@@ -57,7 +60,7 @@ function M.create_commands()
       print("  :MicroProject build    - Build the project")
       print("  :MicroProject here     - Build the current file only")
       print("  :MicroProject add <path> - Add library to project")
-      print("  :MicroProject ui [--tiles 3x2] [--tick 60] [--scale 3] [--debug-canvas true] [--props k=v,k2=v2] - Run current script in LÖVE2D UI")
+      print("  :MicroProject ui [--tiles 3x2] [--tick 60] [--scale 3] [--debug-canvas true] [--props k=v,k2=v2] [--log-file /path/log.txt] [--log-truncate] - Run current script in LÖVE2D UI (default log: ./sw-micro/sw-micro.log)")
     end
   end, {
     nargs = "*",
@@ -80,7 +83,7 @@ function M.create_commands()
 
       -- Basic flag completion for ui
       if parts[2] == "ui" then
-        local flags = { "--tiles", "--tick", "--scale", "--debug-canvas", "--props", "--lib", "--libs" }
+        local flags = { "--tiles", "--tick", "--scale", "--debug-canvas", "--props", "--lib", "--libs", "--log-file", "--log-truncate" }
         local partial = parts[#parts] or ""
         return vim.tbl_filter(function(f)
           return f:find("^" .. vim.pesc(partial))
@@ -91,7 +94,6 @@ function M.create_commands()
     end,
   })
 end
-
 -- Setup auto-detection of projects
 function M.setup_autodetection()
   local aug = vim.api.nvim_create_augroup("MyLspFirstAttach", {})
