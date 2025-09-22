@@ -30,6 +30,7 @@ TOTAL_CHAR_LIMIT = 8100 -- Giving some wiggle room just like nameouschangey says
 ---@field shortenStringDuplicates boolean if true, reduce duplicate string literals
 ---@field skipCombinedFileOutput  boolean if true, doesn't output the combined file - to speed up the build process
 ---@field stripOnDebugDraw      boolean if true, removes any user-defined onDebugDraw() function from compiled output
+---@field stripOnAttatch      boolean if true, removes any user-defined onAttatch() function from compiled output
 
 ---@class Minimizer : BaseClass
 ---@field constants ParsingConstantsLoader list of external, global keywords
@@ -56,6 +57,7 @@ LifeBoatAPI.Tools.Minimizer = {
     this.params.forceBoilerplate = LifeBoatAPI.Tools.DefaultBool(this.params.forceBoilerplate, false)
     this.params.skipCombinedFileOutput = LifeBoatAPI.Tools.DefaultBool(this.params.skipCombinedFileOutput, false)
     this.params.stripOnDebugDraw = LifeBoatAPI.Tools.DefaultBool(this.params.stripOnDebugDraw, true)
+    this.params.stripOnAttatch = LifeBoatAPI.Tools.DefaultBool(this.params.stripOnAttatch, true)
 
     return this
   end,
@@ -104,7 +106,17 @@ LifeBoatAPI.Tools.Minimizer = {
 
     -- strip user onDebugDraw() implementations entirely if requested
     if this.params.stripOnDebugDraw then
-      text = this:_stripOnDebugDraw(text)
+      text = this:_stripFunctionByName(text, "onDebugDraw")
+    end
+
+    -- strip user onAttatch() implementations entirely if requested
+    if this.params.stripOnAttatch then
+      text = this:_stripFunctionByName(text, "onAttatch")
+    end
+
+    -- strip user onAttatch() implementations entirely if requested
+    if this.params.stripOnDebugDraw then
+      text = this:_stripFunctionByName(text, "onAttatch")
     end
 
     -- rename variables so everything is consistent (if creating new globals happens, it's important they have unique names)
@@ -243,25 +255,39 @@ LifeBoatAPI.Tools.Minimizer = {
     )
   end,
 
-  --- Remove any function onDebugDraw() ... end (and assignment forms) from the source text
+  --- Remove any function with the specified name ... end (and assignment forms) from the source text
   --- This runs after strings/comments are stripped, so simple token scanning is safe
   ---@param this Minimizer
   ---@param text string
+  ---@param functionName string
   ---@return string
-  _stripOnDebugDraw = function(this, text)
-    local function find_next_signature(s, idx)
+  _stripFunctionByName = function(this, text, functionName)
+    local function find_next_signature(s, idx, funcName)
       local candidates = {}
+      local patternBase = "%f[%w_]" .. funcName .. "%s*%b()"
       local sp, ep
-      sp, ep = s:find("%f[%w_]local%s+function%s+onDebugDraw%s*%b()", idx)
-      if sp then table.insert(candidates, {sp=sp, ep=ep}) end
-      sp, ep = s:find("%f[%w_]function%s+onDebugDraw%s*%b()", idx)
-      if sp then table.insert(candidates, {sp=sp, ep=ep}) end
-      sp, ep = s:find("%f[%w_]local%s+onDebugDraw%s*=%s*function%s*%b()", idx)
-      if sp then table.insert(candidates, {sp=sp, ep=ep}) end
-      sp, ep = s:find("%f[%w_]onDebugDraw%s*=%s*function%s*%b()", idx)
-      if sp then table.insert(candidates, {sp=sp, ep=ep}) end
-      table.sort(candidates, function(a,b) return a.sp < b.sp end)
-      if #candidates == 0 then return nil end
+      sp, ep = s:find("%f[%w_]local%s+function%s+" .. patternBase, idx)
+      if sp then
+        table.insert(candidates, { sp = sp, ep = ep })
+      end
+      sp, ep = s:find("%f[%w_]function%s+" .. patternBase, idx)
+      if sp then
+        table.insert(candidates, { sp = sp, ep = ep })
+      end
+      sp, ep = s:find("%f[%w_]local%s+" .. funcName .. "%s*=%s*function%s*%b()", idx)
+      if sp then
+        table.insert(candidates, { sp = sp, ep = ep })
+      end
+      sp, ep = s:find("%f[%w_]" .. funcName .. "%s*=%s*function%s*%b()", idx)
+      if sp then
+        table.insert(candidates, { sp = sp, ep = ep })
+      end
+      table.sort(candidates, function(a, b)
+        return a.sp < b.sp
+      end)
+      if #candidates == 0 then
+        return nil
+      end
       return candidates[1].sp, candidates[1].ep
     end
 
@@ -289,13 +315,15 @@ LifeBoatAPI.Tools.Minimizer = {
 
     local i = 1
     while true do
-      local s1, s2 = find_next_signature(text, i)
-      if not s1 then break end
+      local s1, s2 = find_next_signature(text, i, functionName)
+      if not s1 then
+        break
+      end
       local endpos = find_matching_end(text, s2)
       text = text:sub(1, s1 - 1) .. text:sub(endpos)
       i = s1
     end
     return text
   end,
-} 
+}
 LifeBoatAPI.Tools.Class(LifeBoatAPI.Tools.Minimizer)
