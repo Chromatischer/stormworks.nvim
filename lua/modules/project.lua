@@ -197,8 +197,9 @@ function M.get_build_params(project_config)
     shortenStringDuplicates = true,
     removeComments = true,
     skipCombinedFileOutput = false,
-    -- By default, omit/neutralize user onDebugDraw() code from compiled output
+    -- By default, omit/neutralize user onDebugDraw() and onAttatch() code from compiled output
     stripOnDebugDraw = true,
+    stripOnAttatch = true,
   }
 
   -- Merge with project-specific settings

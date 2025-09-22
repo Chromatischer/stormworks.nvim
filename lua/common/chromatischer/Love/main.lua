@@ -319,10 +319,11 @@ function love.draw()
     love.graphics.pop()
   end
 
-  -- Debug canvas
-  if state.debugCanvasEnabled and not detach.is_enabled("debug") then
-    local dbgPanel = ui.draw_debug_canvas_center()
-    if not ui.minimized.debug then
+  -- Debug canvas: always render content if enabled so detached viewer updates
+  if state.debugCanvasEnabled then
+    canvases.ensure()
+    -- Always render into debug canvas (even when detached/minimized)
+    do
       local canvas_prev = love.graphics.getCanvas()
       love.graphics.setCanvas()
       canvases.withTarget("debug", function(api)
@@ -342,7 +343,11 @@ function love.draw()
         end
       end)
       love.graphics.setCanvas(canvas_prev)
-      if dbgPanel and dbgPanel.x then
+    end
+    -- Draw to main window only if not detached and not minimized
+    if not detach.is_enabled("debug") then
+      local dbgPanel = ui.draw_debug_canvas_center()
+      if not ui.minimized.debug and dbgPanel and dbgPanel.x then
         love.graphics.push()
         love.graphics.translate(dbgPanel.x, dbgPanel.y)
         canvases.drawToScreen({ x = 0, y = 0 }, "debug")
