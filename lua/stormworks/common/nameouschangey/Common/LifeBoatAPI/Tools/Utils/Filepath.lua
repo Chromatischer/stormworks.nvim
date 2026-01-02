@@ -22,8 +22,8 @@ LifeBoatAPI.Tools.Filepath = {
       path = path:sub(1, #path - 1)
     end
 
-    this.caseSensitive = caseSensitive
-    if this.caseSensitive then
+    this.caseSensitive = caseSensitive ~= false
+    if not this.caseSensitive then
       path = path:lower()
     end
 
@@ -67,4 +67,3 @@ LifeBoatAPI.Tools.Filepath = {
   end,
 }
 LifeBoatAPI.Tools.Class(LifeBoatAPI.Tools.Filepath)
-
