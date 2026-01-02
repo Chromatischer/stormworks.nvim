@@ -116,6 +116,13 @@ LifeBoatAPI.Tools.Combiner = {
       requireName = requireName:gsub("%.luah$", "") -- "hidden" lua files
 
       requiresToFilecontents[requireName] = filename
+
+      -- Also allow requires that are prefixed with the root folder name (e.g. require("project.module"))
+      local rootBasename = rootDirectory:filename()
+      if rootBasename and #rootBasename > 0 and #requireName > 0 then
+        local prefixed = rootBasename .. "." .. requireName
+        requiresToFilecontents[prefixed] = requiresToFilecontents[prefixed] or filename
+      end
     end
 
     return requiresToFilecontents
