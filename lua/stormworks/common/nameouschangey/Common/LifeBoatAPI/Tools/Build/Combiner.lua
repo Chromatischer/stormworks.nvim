@@ -121,7 +121,9 @@ LifeBoatAPI.Tools.Combiner = {
       local rootBasename = rootDirectory:filename()
       if rootBasename and #rootBasename > 0 and #requireName > 0 then
         local prefixed = rootBasename .. "." .. requireName
-        requiresToFilecontents[prefixed] = requiresToFilecontents[prefixed] or filename
+        if not requiresToFilecontents[prefixed] then
+          requiresToFilecontents[prefixed] = filename
+        end
       end
     end
 
