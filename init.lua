@@ -1,1 +1,1 @@
-return require("sw-micro-project.lua.main")
+return require("sw-micro-project")
