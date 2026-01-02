@@ -22,7 +22,11 @@ LifeBoatAPI.Tools.Filepath = {
       path = path:sub(1, #path - 1)
     end
 
-    this.caseSensitive = caseSensitive ~= false -- default to true when nil
+    if caseSensitive == nil then
+      this.caseSensitive = true
+    else
+      this.caseSensitive = caseSensitive
+    end
     if not this.caseSensitive then
       path = path:lower()
     end
