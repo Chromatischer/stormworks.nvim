@@ -20,18 +20,16 @@ A Neovim plugin that streamlines Stormworks microcontroller and addon script dev
 
 
 ## Installation
-Using lazy.nvim (opts pattern; no manual setup call needed):
+Using lazy.nvim:
 
 ```lua
-{
+return {
   "Chromatischer/stormworks.nvim",
-  opts = {
-    -- see Configuration for all options
-  },
+  config = function()
+    require("stormworks").setup({})
+  end,
 }
 ```
-
-Note: The runtime module name is `sw-micro-project`. Setting `main = "sw-micro-project"` enables lazy.nvim’s automatic `setup(opts)` call.
 ## Quick start
 
 1) Mark your current directory as a Stormworks microcontroller project:
@@ -108,12 +106,10 @@ return {
 
 ## Configuration
 
-With lazy.nvim, configure via `opts` (no manual `setup` call needed). Defaults are shown below:
+Configure via `setup()`. Defaults are shown below:
 
 ```lua
-{
-  main = "sw-micro-project",
-  opts = {
+require("stormworks").setup({
   -- User-defined library paths included for all projects
   user_lib_paths = {},
 
@@ -138,8 +134,7 @@ With lazy.nvim, configure via `opts` (no manual `setup` call needed). Defaults a
   -- LÖVE2D binary discovery
   love_command = "love",                           -- use PATH if available
   love_macos_path = "/Applications/love.app/Contents/MacOS/love", -- macOS fallback
-  }
-}
+})
 ```
 
 Notes:
