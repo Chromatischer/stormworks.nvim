@@ -10,7 +10,7 @@ require("stormworks.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.StringU
 ---Simple filepath standardisation to avoid the usual issues with filepath (which slash to use, etc.)
 ---@class Filepath: BaseClass
 ---@field rawPath string raw path stored internally, currently uses forward slashes to represent slashes
----@field caseSensitive boolean whether this path is case sensitive or not (true by default)
+---@field caseSensitive boolean whether this path is case sensitive or not (defaults to true; set to false for case-insensitive filesystems)
 LifeBoatAPI.Tools.Filepath = {
 
   ---@param cls Filepath
@@ -22,7 +22,7 @@ LifeBoatAPI.Tools.Filepath = {
       path = path:sub(1, #path - 1)
     end
 
-    this.caseSensitive = caseSensitive ~= false
+    this.caseSensitive = caseSensitive ~= false -- default to true when nil
     if not this.caseSensitive then
       path = path:lower()
     end
