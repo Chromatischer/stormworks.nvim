@@ -119,7 +119,7 @@ LifeBoatAPI.Tools.Combiner = {
 
       -- Also allow requires that are prefixed with the root folder name (e.g. require("project.module"))
       local rootBasename = rootDirectory:filename()
-      if rootBasename and #rootBasename > 0 and #requireName > 0 then
+      if rootBasename and rootBasename ~= "" and requireName ~= "" then
         local prefixed = rootBasename .. "." .. requireName
         if not requiresToFilecontents[prefixed] then
           requiresToFilecontents[prefixed] = filename
