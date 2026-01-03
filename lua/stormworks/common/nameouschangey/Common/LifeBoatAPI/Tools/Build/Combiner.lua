@@ -93,7 +93,8 @@ LifeBoatAPI.Tools.Combiner = {
       local require = data:match("\n%s-require%([\"'](..-)[\"']%)")
       if require then
         keepSearching = true
-        local fullstring = "\n%s-require%([\"']" .. require .. "[\"']%)%s-"
+        local escapedRequire = LifeBoatAPI.Tools.StringUtils.escape(require)
+        local fullstring = "\n%s-require%([\"']" .. escapedRequire .. "[\"']%)%s-"
         if requiresSeen[require] then
           -- already seen this, so we just cut it from the file
           this:_log("skip duplicate require " .. require)
