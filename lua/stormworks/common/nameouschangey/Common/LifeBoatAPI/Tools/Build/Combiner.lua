@@ -85,6 +85,8 @@ LifeBoatAPI.Tools.Combiner = {
 
     local requiresSeen = {}
     local filesSeen = {}
+    local iterations = 0
+    local MAX_ITER = 20000
     local keepSearching = true
     while keepSearching do
       keepSearching = false
@@ -108,7 +110,7 @@ LifeBoatAPI.Tools.Combiner = {
             local fileKey = filename:linux()
             if filesSeen[fileKey] then
               this:_log("skip already included file " .. fileKey)
-              data = data:gsub(fullstring, "", 1)
+              data = data:gsub(fullstring, "")
             else
               filesSeen[fileKey] = true
 
@@ -131,6 +133,12 @@ LifeBoatAPI.Tools.Combiner = {
             error("Require " .. require .. " was not found when building: " .. entryPointFile:linux() .. "!")
           end
         end
+      end
+
+      iterations = iterations + 1
+      if iterations > MAX_ITER then
+        this:_log("aborting combine due to excessive iterations; possible unresolved require loop")
+        break
       end
     end
     return data
