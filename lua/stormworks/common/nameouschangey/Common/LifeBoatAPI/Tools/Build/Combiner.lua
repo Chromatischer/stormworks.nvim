@@ -24,7 +24,35 @@ LifeBoatAPI.Tools.Combiner = {
     this.filesByRequire = {}
     this.loadedFileData = {}
     this.systemRequires = { "table", "math", "string" }
+    this._logFilepath = nil
+    this._logFileTruncated = false
     return this
+  end,
+
+  ---@param this Combiner
+  ---@param filepath Filepath
+  setLogFile = function(this, filepath)
+    this._logFilepath = filepath
+    this._logFileTruncated = false
+  end,
+
+  ---@param this Combiner
+  ---@param text string
+  _log = function(this, text)
+    if not this._logFilepath then
+      return
+    end
+    local path = this._logFilepath
+    local dir = path:directory():linux()
+    os.execute('mkdir -p "' .. dir .. '" 2>/dev/null')
+    local mode = this._logFileTruncated and "ab" or "wb"
+    local file = io.open(path:linux(), mode)
+    if not file then
+      return
+    end
+    file:write(text .. "\n")
+    file:close()
+    this._logFileTruncated = true
   end,
 
   ---@param this Combiner
@@ -53,6 +81,7 @@ LifeBoatAPI.Tools.Combiner = {
   ---@param data string
   combine = function(this, data, entryPointFile)
     data = "\n" .. data -- ensure the file starts with a new line, so any first-line requires get found
+    this:_log(("== combine %s =="):format(entryPointFile:linux()))
 
     local requiresSeen = {}
     local filesSeen = {}
@@ -65,6 +94,7 @@ LifeBoatAPI.Tools.Combiner = {
         local fullstring = "\n%s-require%([\"']" .. require .. "[\"']%)%s-"
         if requiresSeen[require] then
           -- already seen this, so we just cut it from the file
+          this:_log("skip duplicate require " .. require)
           data = data:gsub(fullstring, "")
         else
           -- valid require to be replaced with the file contents
@@ -72,10 +102,12 @@ LifeBoatAPI.Tools.Combiner = {
 
           if this.filesByRequire[require] then
             local filename = this.filesByRequire[require]
+            this:_log("resolve " .. require .. " -> " .. filename:linux())
 
             -- Avoid re-including the same file (guards circular/self requires with different names)
             local fileKey = filename:linux()
             if filesSeen[fileKey] then
+              this:_log("skip already included file " .. fileKey)
               data = data:gsub(fullstring, "", 1)
             else
               filesSeen[fileKey] = true
@@ -95,6 +127,7 @@ LifeBoatAPI.Tools.Combiner = {
             for _, value in ipairs(this.filesByRequire) do
               print("Contains: " .. value)
             end
+            this:_log("missing require " .. require .. " in " .. entryPointFile:linux())
             error("Require " .. require .. " was not found when building: " .. entryPointFile:linux() .. "!")
           end
         end

@@ -34,6 +34,8 @@ LifeBoatAPI.Tools.Builder = {
     self.mission_constants = addonDoc and self:_setupMissionConstants(addonDoc) or nil
 
     self.combiner = LifeBoatAPI.Tools.Combiner:new()
+    -- Write a combiner trace for debugging require resolution / circular imports
+    self.combiner:setLogFile(outputDirectory:add("/_intermediate/combiner.log"))
     for _, rootDir in ipairs(rootDirs) do
       rootDir = rootDir ---@type Filepath
       print("Dir added: " .. rootDir:linux())
