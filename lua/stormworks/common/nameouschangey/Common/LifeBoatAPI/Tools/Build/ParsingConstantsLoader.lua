@@ -6,6 +6,7 @@
 
 require("stormworks.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.Base")
 require("stormworks.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.TableUtils")
+require("stormworks.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.StringUtils")
 
 ---@class ParsingConstantsLoader : BaseClass
 ---@field restrictedKeywords table<string,boolean>
@@ -121,7 +122,7 @@ LifeBoatAPI.Tools.ParsingConstantsLoader = {
 
   loadLibrary = function(this, libname, instanceBased) -- libraries used in Stormworks are all flat name.function - nothing more needed
     instanceBased = instanceBased == nil or instanceBased
-    local tbl = (_ENV and _ENV[libname] or {})
+    local tbl = (_ENV and _ENV[libname]) or (_G and _G[libname]) or {}
     for k, _ in pairs(tbl) do
       this:_addFullName(libname .. "." .. k, instanceBased)
     end
