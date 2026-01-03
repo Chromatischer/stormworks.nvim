@@ -24,7 +24,35 @@ LifeBoatAPI.Tools.Combiner = {
     this.filesByRequire = {}
     this.loadedFileData = {}
     this.systemRequires = { "table", "math", "string" }
+    this._logFilepath = nil
+    this._logFileTruncated = false
     return this
+  end,
+
+  ---@param this Combiner
+  ---@param filepath Filepath
+  setLogFile = function(this, filepath)
+    this._logFilepath = filepath
+    this._logFileTruncated = false
+  end,
+
+  ---@param this Combiner
+  ---@param text string
+  _log = function(this, text)
+    if not this._logFilepath then
+      return
+    end
+    local path = this._logFilepath
+    local dir = path:directory():linux()
+    os.execute('mkdir -p "' .. dir .. '" 2>/dev/null')
+    local mode = this._logFileTruncated and "ab" or "wb"
+    local file = io.open(path:linux(), mode)
+    if not file then
+      return
+    end
+    file:write(text .. "\n")
+    file:close()
+    this._logFileTruncated = true
   end,
 
   ---@param this Combiner
@@ -53,17 +81,23 @@ LifeBoatAPI.Tools.Combiner = {
   ---@param data string
   combine = function(this, data, entryPointFile)
     data = "\n" .. data -- ensure the file starts with a new line, so any first-line requires get found
+    this:_log(("== combine %s =="):format(entryPointFile:linux()))
 
     local requiresSeen = {}
+    local filesSeen = {}
+    local iterations = 0
+    local MAX_ITER = 20000
     local keepSearching = true
     while keepSearching do
       keepSearching = false
       local require = data:match("\n%s-require%([\"'](..-)[\"']%)")
       if require then
         keepSearching = true
-        local fullstring = "\n%s-require%([\"']" .. require .. "[\"']%)%s-"
+        local escapedRequire = LifeBoatAPI.Tools.StringUtils.escape(require)
+        local fullstring = "\n%s-require%([\"']" .. escapedRequire .. "[\"']%)%s-"
         if requiresSeen[require] then
           -- already seen this, so we just cut it from the file
+          this:_log("skip duplicate require " .. require)
           data = data:gsub(fullstring, "")
         else
           -- valid require to be replaced with the file contents
@@ -71,14 +105,24 @@ LifeBoatAPI.Tools.Combiner = {
 
           if this.filesByRequire[require] then
             local filename = this.filesByRequire[require]
+            this:_log("resolve " .. require .. " -> " .. filename:linux())
+
+            -- Avoid re-including the same file (guards circular/self requires with different names)
+            local fileKey = filename:linux()
+            if filesSeen[fileKey] then
+              this:_log("skip already included file " .. fileKey)
+              data = data:gsub(fullstring, "")
+            else
+              filesSeen[fileKey] = true
 
             -- only load each file's contentes one time
-            if not this.loadedFileData[require] then
-              this.loadedFileData[require] = LifeBoatAPI.Tools.FileSystemUtils.readAllText(filename)
-            end
+              if not this.loadedFileData[require] then
+                this.loadedFileData[require] = LifeBoatAPI.Tools.FileSystemUtils.readAllText(filename)
+              end
 
-            local filedata = this.loadedFileData[require]
-            data = data:gsub(fullstring, LifeBoatAPI.Tools.StringUtils.escapeSub("\n" .. filedata .. "\n"), 1) -- only first instance
+              local filedata = this.loadedFileData[require]
+              data = data:gsub(fullstring, LifeBoatAPI.Tools.StringUtils.escapeSub("\n" .. filedata .. "\n"), 1) -- only first instance
+            end
           elseif LifeBoatAPI.Tools.TableUtils.containsValue(this.systemRequires, require) then
             data = data:gsub(fullstring, "") -- remove system requires, without error, as long as they are allowed in the game
           else
@@ -86,9 +130,16 @@ LifeBoatAPI.Tools.Combiner = {
             for _, value in ipairs(this.filesByRequire) do
               print("Contains: " .. value)
             end
+            this:_log("missing require " .. require .. " in " .. entryPointFile:linux())
             error("Require " .. require .. " was not found when building: " .. entryPointFile:linux() .. "!")
           end
         end
+      end
+
+      iterations = iterations + 1
+      if iterations > MAX_ITER then
+        this:_log("aborting combine due to excessive iterations; possible unresolved require loop")
+        break
       end
     end
     return data
@@ -116,6 +167,15 @@ LifeBoatAPI.Tools.Combiner = {
       requireName = requireName:gsub("%.luah$", "") -- "hidden" lua files
 
       requiresToFilecontents[requireName] = filename
+
+      -- Also allow requires that are prefixed with the root folder name (e.g. require("project.module"))
+      local rootBasename = rootDirectory:filename()
+      if rootBasename and rootBasename ~= "" and requireName ~= "" then
+        local prefixed = rootBasename .. "." .. requireName
+        if not requiresToFilecontents[prefixed] then
+          requiresToFilecontents[prefixed] = filename
+        end
+      end
     end
 
     return requiresToFilecontents
