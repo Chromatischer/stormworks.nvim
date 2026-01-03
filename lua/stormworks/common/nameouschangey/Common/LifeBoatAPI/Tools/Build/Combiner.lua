@@ -55,6 +55,7 @@ LifeBoatAPI.Tools.Combiner = {
     data = "\n" .. data -- ensure the file starts with a new line, so any first-line requires get found
 
     local requiresSeen = {}
+    local filesSeen = {}
     local keepSearching = true
     while keepSearching do
       keepSearching = false
@@ -72,13 +73,21 @@ LifeBoatAPI.Tools.Combiner = {
           if this.filesByRequire[require] then
             local filename = this.filesByRequire[require]
 
-            -- only load each file's contentes one time
-            if not this.loadedFileData[require] then
-              this.loadedFileData[require] = LifeBoatAPI.Tools.FileSystemUtils.readAllText(filename)
-            end
+            -- Avoid re-including the same file (guards circular/self requires with different names)
+            local fileKey = filename:linux()
+            if filesSeen[fileKey] then
+              data = data:gsub(fullstring, "", 1)
+            else
+              filesSeen[fileKey] = true
 
-            local filedata = this.loadedFileData[require]
-            data = data:gsub(fullstring, LifeBoatAPI.Tools.StringUtils.escapeSub("\n" .. filedata .. "\n"), 1) -- only first instance
+            -- only load each file's contentes one time
+              if not this.loadedFileData[require] then
+                this.loadedFileData[require] = LifeBoatAPI.Tools.FileSystemUtils.readAllText(filename)
+              end
+
+              local filedata = this.loadedFileData[require]
+              data = data:gsub(fullstring, LifeBoatAPI.Tools.StringUtils.escapeSub("\n" .. filedata .. "\n"), 1) -- only first instance
+            end
           elseif LifeBoatAPI.Tools.TableUtils.containsValue(this.systemRequires, require) then
             data = data:gsub(fullstring, "") -- remove system requires, without error, as long as they are allowed in the game
           else
