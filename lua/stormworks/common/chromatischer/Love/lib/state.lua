@@ -81,6 +81,29 @@ local state = {
     lastTime = 0,
     doExport = false,    -- flag to trigger export
   },
+
+  -- I/O Tab system
+  ioTabs = {
+    enabled = false,
+    tabs = {},  -- { { name="all", label="All", channels=nil }, ... }
+    activeInputTab = "all",
+    activeOutputTab = "all",
+  },
+
+  -- Log UI state
+  logUI = {
+    scrollOffset = 0,      -- lines from bottom (0 = at bottom)
+    autoScroll = true,     -- toggle for lock-to-bottom
+    searchText = "",       -- filter pattern
+    searchActive = false,  -- text input focus
+    collapsedSources = {}, -- { system = false, ... }
+  },
+
+  -- Simulator tracking
+  simulatorDriven = {
+    inputB = {},  -- [1..32] = true if simulator controls
+    inputN = {},  -- [1..32] = true if simulator controls
+  },
 }
 
 for i=1,32 do
@@ -88,6 +111,8 @@ for i=1,32 do
   state.outputB[i] = false
   state.inputN[i] = 0
   state.outputN[i] = 0
+  state.simulatorDriven.inputB[i] = false
+  state.simulatorDriven.inputN[i] = false
 end
 
 function state.getGameSize()

@@ -185,6 +185,17 @@ local function make_env()
     end
     env.require = safe_require
   end
+
+  -- Override print to tag logs from main script
+  env.print = function(...)
+    local parts = {}
+    for i = 1, select('#', ...) do
+      parts[i] = tostring(select(i, ...))
+    end
+    local line = table.concat(parts, '\t')
+    logger.append(line, "main")
+  end
+
   return env
 end
 
@@ -231,6 +242,11 @@ function sandbox.load_script()
   end
   sandbox.env = env
   sandbox.sim = nil -- clear any previous simulator on fresh load
+  -- Reset simulator tracking
+  for i = 1, 32 do
+    state.simulatorDriven.inputB[i] = false
+    state.simulatorDriven.inputN[i] = false
+  end
   -- If the MC defines onAttatch (note: spelled as requested), allow it to configure runtime
   if type(env.onAttatch) == "function" then
     -- Allow setmetatable during onAttatch (and any require calls inside it)
@@ -291,6 +307,24 @@ function sandbox.load_script()
           end
         end
 
+        -- I/O Tab system configuration
+        if type(cfg.io_tabs) == "table" and cfg.io_tabs.enabled then
+          state.ioTabs.enabled = true
+          state.ioTabs.tabs = cfg.io_tabs.tabs or {}
+          state.ioTabs.activeInputTab = cfg.io_tabs.default_tab or "all"
+          state.ioTabs.activeOutputTab = cfg.io_tabs.default_tab or "all"
+          -- Validate channel numbers (1-32)
+          for _, tab in ipairs(state.ioTabs.tabs) do
+            if tab.channels then
+              for i, ch in ipairs(tab.channels) do
+                if type(ch) ~= "number" or ch < 1 or ch > 32 then
+                  logger.append(string.format("[warn] io_tabs: invalid channel %s in tab '%s'", tostring(ch), tab.name or "?"))
+                end
+              end
+            end
+          end
+        end
+
         -- Input simulator support
         local sim = cfg.input_simulator
         if sim ~= nil then
@@ -323,6 +357,7 @@ function sandbox.load_script()
               if not ch then
                 return
               end
+              state.simulatorDriven.inputB[ch] = true
               state.inputB[ch] = not not v
             end
             function sim_ctx.input.setNumber(ch, v)
@@ -330,6 +365,7 @@ function sandbox.load_script()
               if not ch then
                 return
               end
+              state.simulatorDriven.inputN[ch] = true
               local num = tonumber(v) or 0
               if num ~= num then
                 num = 0
@@ -357,6 +393,16 @@ function sandbox.load_script()
               end,
             }
             sim_ctx.touch = state.touch
+
+            -- Override print for simulator to tag logs
+            sim_ctx.print = function(...)
+              local parts = {}
+              for i = 1, select('#', ...) do
+                parts[i] = tostring(select(i, ...))
+              end
+              local line = table.concat(parts, '\t')
+              logger.append(line, "simulator")
+            end
 
             sandbox.sim = { hooks = hooks, ctx = sim_ctx, cfg = cfg.input_simulator_config }
             -- Initialize simulator if it exposes onInit

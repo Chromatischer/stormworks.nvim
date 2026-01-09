@@ -258,6 +258,69 @@ local function try_tick()
   end
 end
 
+-- Perform canvas export
+local function perform_export()
+  local headless = require("lib.headless")
+  local format = state.export.format or "png"
+  local capture = state.export.capture or "game"
+
+  -- Determine base directory (script directory or cwd)
+  local base_dir = nil
+  if state.scriptPath then
+    base_dir = state.scriptPath:match("^(.*)/[^/]+$")
+  end
+
+  local results = {}
+  local errors = {}
+
+  if capture == "both" then
+    -- Export both canvases
+    local game_path = headless.generate_export_path(base_dir, "game", format)
+    local debug_path = headless.generate_export_path(base_dir, "debug", format)
+
+    local ok1, err1 = headless.export_canvas(canvases.game, game_path, format)
+    local ok2, err2 = headless.export_canvas(canvases.debug, debug_path, format)
+
+    if ok1 then
+      table.insert(results, game_path)
+    else
+      table.insert(errors, "Export game failed: " .. tostring(err1))
+    end
+
+    if ok2 then
+      table.insert(results, debug_path)
+    else
+      table.insert(errors, "Export debug failed: " .. tostring(err2))
+    end
+  else
+    -- Export single canvas
+    local canvas = (capture == "game") and canvases.game or canvases.debug
+    local path = headless.generate_export_path(base_dir, capture, format)
+
+    local ok, err = headless.export_canvas(canvas, path, format)
+    if ok then
+      table.insert(results, path)
+    else
+      table.insert(errors, "Export failed: " .. tostring(err))
+    end
+  end
+
+  -- Show results
+  if #results > 0 then
+    state.export.lastPath = results[1]
+    state.export.lastTime = love.timer.getTime()
+    state.export.showModal = false
+    for _, path in ipairs(results) do
+      logger.append("[info] Exported: " .. path)
+    end
+  end
+
+  -- Show errors
+  for _, err in ipairs(errors) do
+    logger.append("[error] " .. err)
+  end
+end
+
 function love.update(dt)
   if state.detached.enabled then
     -- Poll for updated frame in detached viewer
@@ -439,6 +502,19 @@ function love.keypressed(key)
     end
     return
   end
+
+  -- Handle search input
+  if state.logUI.searchActive then
+    if key == "backspace" then
+      state.logUI.searchText = state.logUI.searchText:sub(1, -2)
+      return
+    elseif key == "escape" then
+      state.logUI.searchActive = false
+      state.logUI.searchText = ""
+      return
+    end
+  end
+
   if key == "space" then
     state.running = not state.running
     -- Reset error tracking when manually resuming
@@ -483,6 +559,12 @@ function love.keypressed(key)
   end
 end
 
+function love.textinput(text)
+  if state.logUI.searchActive then
+    state.logUI.searchText = state.logUI.searchText .. text
+  end
+end
+
 function love.mousepressed(x, y, button)
   if ui.mousepressed then
     ui.mousepressed(x, y, button)
@@ -511,69 +593,6 @@ local function clamp_window_dimensions(w, h, minw, minh, maxw, maxh)
   w = math.max(minw, math.min(maxw, w))
   h = math.max(minh, math.min(maxh, h))
   return w, h
-end
-
--- Perform canvas export
-local function perform_export()
-  local headless = require("lib.headless")
-  local format = state.export.format or "png"
-  local capture = state.export.capture or "game"
-
-  -- Determine base directory (script directory or cwd)
-  local base_dir = nil
-  if state.scriptPath then
-    base_dir = state.scriptPath:match("^(.*)/[^/]+$")
-  end
-
-  local results = {}
-  local errors = {}
-
-  if capture == "both" then
-    -- Export both canvases
-    local game_path = headless.generate_export_path(base_dir, "game", format)
-    local debug_path = headless.generate_export_path(base_dir, "debug", format)
-
-    local ok1, err1 = headless.export_canvas(canvases.game, game_path, format)
-    local ok2, err2 = headless.export_canvas(canvases.debug, debug_path, format)
-
-    if ok1 then
-      table.insert(results, game_path)
-    else
-      table.insert(errors, "Export game failed: " .. tostring(err1))
-    end
-
-    if ok2 then
-      table.insert(results, debug_path)
-    else
-      table.insert(errors, "Export debug failed: " .. tostring(err2))
-    end
-  else
-    -- Export single canvas
-    local canvas = (capture == "game") and canvases.game or canvases.debug
-    local path = headless.generate_export_path(base_dir, capture, format)
-
-    local ok, err = headless.export_canvas(canvas, path, format)
-    if ok then
-      table.insert(results, path)
-    else
-      table.insert(errors, "Export failed: " .. tostring(err))
-    end
-  end
-
-  -- Show results
-  if #results > 0 then
-    state.export.lastPath = results[1]
-    state.export.lastTime = love.timer.getTime()
-    state.export.showModal = false
-    for _, path in ipairs(results) do
-      logger.append("[info] Exported: " .. path)
-    end
-  end
-
-  -- Show errors
-  for _, err in ipairs(errors) do
-    logger.append("[error] " .. err)
-  end
 end
 
 function love.resize(w, h)
