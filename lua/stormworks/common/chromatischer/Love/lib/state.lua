@@ -46,6 +46,11 @@ local state = {
   log = {},
   lastError = nil,
   pauseOnError = true,
+  
+  -- Error repetition tracking
+  errorCount = 0,           -- consecutive count of current error
+  errorSignature = nil,     -- normalized error signature for comparison
+  maxErrorRepeats = 5,      -- threshold before auto-pause
 
   -- Fonts
   fonts = {
@@ -65,6 +70,16 @@ local state = {
     tick = false,
     scale = false,
     debugCanvas = false,
+  },
+
+  -- Export feature state
+  export = {
+    showModal = false,
+    format = "png",      -- "png" or "jpg"
+    capture = "game",    -- "game", "debug", or "both"
+    lastPath = nil,      -- for toast display
+    lastTime = 0,
+    doExport = false,    -- flag to trigger export
   },
 }
 

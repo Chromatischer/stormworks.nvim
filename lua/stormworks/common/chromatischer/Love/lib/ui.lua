@@ -133,6 +133,24 @@ local function draw_icon_dock(x, y, size, color)
   love.graphics.polygon("fill", ax1, ay1, ax1 + 5, ay1, ax1, ay1 - 5)
 end
 
+-- Icon: download. Draws a down arrow with a tray.
+local function draw_icon_download(x, y, size, color)
+  local s = size or 16
+  local px = math.floor(x) + 0.5
+  local py = math.floor(y) + 0.5
+  love.graphics.setLineWidth(1)
+  love.graphics.setColor(color)
+  -- tray at bottom
+  love.graphics.line(px + 2, py + s - 2, px + s - 2, py + s - 2)
+  -- down arrow
+  local ax = px + s / 2
+  local ay = py + 2
+  local arrow_len = s - 6
+  love.graphics.line(ax, ay, ax, ay + arrow_len)
+  -- arrow head
+  love.graphics.polygon("fill", ax, ay + arrow_len, ax - 4, ay + arrow_len - 4, ax + 4, ay + arrow_len - 4)
+end
+
 local function draw_nav_bar(p, title, which)
   -- which: 'game' | 'debug' | 'left' (merged tabs)
   love.graphics.setColor(0.16, 0.16, 0.18, 1)
@@ -406,9 +424,14 @@ local function draw_toolbar_icon_button(x, y, opts)
     love.graphics.setColor(1, 1, 1, is_hover and 1 or 0.95)
     love.graphics.draw(img, bx + pad + ox, by + pad + oy, 0, scale, scale)
   else
-    -- fallback: small triangle for play
+    -- fallback: vector icons
     love.graphics.setColor(1, 1, 1, 0.95)
-    love.graphics.polygon("fill", bx + 7, by + 5, bx + 7, by + btnSize - 5, bx + btnSize - 5, by + btnSize / 2)
+    if opts.name == "download" then
+      draw_icon_download(bx + pad, by + pad, target, { 1, 1, 1, 0.95 })
+    else
+      -- default: small triangle for play
+      love.graphics.polygon("fill", bx + 7, by + 5, bx + 7, by + btnSize - 5, bx + btnSize - 5, by + btnSize / 2)
+    end
   end
 
   -- register hit rect
@@ -629,8 +652,17 @@ function ui.draw_toolbar()
   love.graphics.print(string.format("Tiles: %dx%d", state.tilesX, state.tilesY), x, p.y + 6)
   x = x + 120
   love.graphics.print(string.format("Tick: %d", state.tickRate), x, p.y + 6)
-  -- Tick rate controls (adjust onTick rate; onDraw remains tied to frame rate)
   x = x + 80
+  
+  -- Error counter display
+  if state.errorCount > 0 and state.errorSignature then
+    local errColor = state.errorCount >= state.maxErrorRepeats and ui.color.warn or { 1, 0.8, 0.3, 1 }
+    love.graphics.setColor(errColor)
+    love.graphics.print(string.format("Error: %d/%d", state.errorCount, state.maxErrorRepeats), x, p.y + 6)
+    x = x + 100
+  end
+  
+  -- Tick rate controls (adjust onTick rate; onDraw remains tied to frame rate)
   x = x
     + draw_toolbar_icon_button(x, y, {
       name = "remove",
@@ -645,6 +677,16 @@ function ui.draw_toolbar()
       active = false,
       action = "tick_plus",
       tooltip = "Speed up tick (double) [ ] ]",
+    })
+    + 16
+
+  -- Export button
+  x = x
+    + draw_toolbar_icon_button(x, y, {
+      name = "download",
+      active = state.export.showModal,
+      action = "toggle_export_modal",
+      tooltip = "Export Canvas [E]",
     })
 end
 
@@ -821,6 +863,47 @@ function ui.mousepressed(mx, my, button)
   if button ~= 1 then
     return
   end
+
+  -- Export modal buttons (handle first to prevent clicking through)
+  if state.export.showModal and ui._modalRects then
+    for _, r in ipairs(ui._modalRects) do
+      if r and (mx >= r.x and my >= r.y and mx <= r.x + r.w and my <= r.y + r.h) then
+        if r.action == "export_format_png" then
+          state.export.format = "png"
+          return
+        elseif r.action == "export_format_jpg" then
+          state.export.format = "jpg"
+          return
+        elseif r.action == "export_canvas_game" then
+          state.export.capture = "game"
+          return
+        elseif r.action == "export_canvas_debug" then
+          state.export.capture = "debug"
+          return
+        elseif r.action == "export_canvas_both" then
+          state.export.capture = "both"
+          return
+        elseif r.action == "perform_export" then
+          -- Set flag for main.lua to handle
+          state.export.doExport = true
+          return
+        elseif r.action == "cancel_export" then
+          state.export.showModal = false
+          return
+        end
+      end
+    end
+    -- If modal is open and we clicked outside the modal, close it
+    local modal_w, modal_h = love.graphics.getWidth(), love.graphics.getHeight()
+    local modalW, modalH = 300, 220
+    local mx_pos = math.floor((modal_w - modalW) / 2)
+    local my_pos = math.floor((modal_h - modalH) / 2)
+    if not (mx >= mx_pos and my >= my_pos and mx < mx_pos + modalW and my < my_pos + modalH) then
+      state.export.showModal = false
+    end
+    return
+  end
+
   -- Toolbar buttons
   if ui._toolbarRects then
     for _, r in ipairs(ui._toolbarRects) do
@@ -851,6 +934,9 @@ function ui.mousepressed(mx, my, button)
         elseif r.action == "tick_plus" then
           local factor = (love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")) and 10 or 20
           state.tickRate = math.min(480, math.floor(state.tickRate + factor))
+          return
+        elseif r.action == "toggle_export_modal" then
+          state.export.showModal = not state.export.showModal
           return
         end
       end
@@ -977,6 +1063,159 @@ function ui.wheelmoved(dx, dy)
       return
     end
   end
+end
+
+-- Export modal dialog
+function ui.draw_export_modal()
+  if not state.export.showModal then
+    return
+  end
+
+  local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+  local modalW, modalH = 300, 220
+  local mx_pos = math.floor((w - modalW) / 2)
+  local my_pos = math.floor((h - modalH) / 2)
+  local mx, my = love.mouse.getPosition()
+
+  -- Dim background
+  love.graphics.setColor(0, 0, 0, 0.5)
+  love.graphics.rectangle("fill", 0, 0, w, h)
+
+  -- Modal panel
+  love.graphics.setColor(ui.color.panel)
+  love.graphics.rectangle("fill", mx_pos, my_pos, modalW, modalH, 8, 8)
+  love.graphics.setColor(1, 1, 1, 0.1)
+  love.graphics.rectangle("line", mx_pos + 0.5, my_pos + 0.5, modalW - 1, modalH - 1, 8, 8)
+
+  -- Title
+  love.graphics.setColor(ui.color.text)
+  love.graphics.print("Export Canvas", mx_pos + 16, my_pos + 12)
+
+  -- Initialize modal rects if not already
+  ui._modalRects = {}
+
+  local y = my_pos + 45
+
+  -- Format selection
+  love.graphics.setColor(ui.color.text)
+  love.graphics.print("Format:", mx_pos + 16, y)
+  y = y + 25
+
+  local fmt_x = mx_pos + 16
+  local btn_w = 60
+  local btn_h = 30
+  local btn_gap = 10
+
+  -- PNG button
+  local png_hover = (mx >= fmt_x and my >= y and mx < fmt_x + btn_w and my < y + btn_h)
+  local png_active = (state.export.format == "png")
+  love.graphics.setColor(png_active and ui.color.accent or (png_hover and { 0.28, 0.28, 0.34, 1 } or { 0.22, 0.22, 0.26, 1 }))
+  love.graphics.rectangle("fill", fmt_x, y, btn_w, btn_h, 4, 4)
+  love.graphics.setColor(ui.color.text)
+  love.graphics.print("PNG", fmt_x + 18, y + 8)
+  table.insert(ui._modalRects, { x = fmt_x, y = y, w = btn_w, h = btn_h, action = "export_format_png" })
+
+  -- JPG button
+  local jpg_x = fmt_x + btn_w + btn_gap
+  local jpg_hover = (mx >= jpg_x and my >= y and mx < jpg_x + btn_w and my < y + btn_h)
+  local jpg_active = (state.export.format == "jpg")
+  love.graphics.setColor(jpg_active and ui.color.accent or (jpg_hover and { 0.28, 0.28, 0.34, 1 } or { 0.22, 0.22, 0.26, 1 }))
+  love.graphics.rectangle("fill", jpg_x, y, btn_w, btn_h, 4, 4)
+  love.graphics.setColor(ui.color.text)
+  love.graphics.print("JPG", jpg_x + 18, y + 8)
+  table.insert(ui._modalRects, { x = jpg_x, y = y, w = btn_w, h = btn_h, action = "export_format_jpg" })
+
+  y = y + btn_h + 20
+
+  -- Canvas selection
+  love.graphics.setColor(ui.color.text)
+  love.graphics.print("Canvas:", mx_pos + 16, y)
+  y = y + 25
+
+  local canvas_x = mx_pos + 16
+  local canvas_btn_w = 65
+
+  -- Game button
+  local game_hover = (mx >= canvas_x and my >= y and mx < canvas_x + canvas_btn_w and my < y + btn_h)
+  local game_active = (state.export.capture == "game")
+  love.graphics.setColor(game_active and ui.color.accent or (game_hover and { 0.28, 0.28, 0.34, 1 } or { 0.22, 0.22, 0.26, 1 }))
+  love.graphics.rectangle("fill", canvas_x, y, canvas_btn_w, btn_h, 4, 4)
+  love.graphics.setColor(ui.color.text)
+  love.graphics.print("Game", canvas_x + 14, y + 8)
+  table.insert(ui._modalRects, { x = canvas_x, y = y, w = canvas_btn_w, h = btn_h, action = "export_canvas_game" })
+
+  -- Debug button
+  local debug_x = canvas_x + canvas_btn_w + btn_gap
+  local debug_disabled = not state.debugCanvasEnabled
+  local debug_hover = (mx >= debug_x and my >= y and mx < debug_x + canvas_btn_w and my < y + btn_h)
+  local debug_active = (state.export.capture == "debug")
+  love.graphics.setColor(debug_disabled and { 0.15, 0.15, 0.15, 1 } or (debug_active and ui.color.accent or (debug_hover and { 0.28, 0.28, 0.34, 1 } or { 0.22, 0.22, 0.26, 1 })))
+  love.graphics.rectangle("fill", debug_x, y, canvas_btn_w, btn_h, 4, 4)
+  love.graphics.setColor(debug_disabled and { 0.4, 0.4, 0.4, 1 } or ui.color.text)
+  love.graphics.print("Debug", debug_x + 10, y + 8)
+  if not debug_disabled then
+    table.insert(ui._modalRects, { x = debug_x, y = y, w = canvas_btn_w, h = btn_h, action = "export_canvas_debug" })
+  end
+
+  -- Both button
+  local both_x = debug_x + canvas_btn_w + btn_gap
+  local both_disabled = not state.debugCanvasEnabled
+  local both_hover = (mx >= both_x and my >= y and mx < both_x + canvas_btn_w and my < y + btn_h)
+  local both_active = (state.export.capture == "both")
+  love.graphics.setColor(both_disabled and { 0.15, 0.15, 0.15, 1 } or (both_active and ui.color.accent or (both_hover and { 0.28, 0.28, 0.34, 1 } or { 0.22, 0.22, 0.26, 1 })))
+  love.graphics.rectangle("fill", both_x, y, canvas_btn_w, btn_h, 4, 4)
+  love.graphics.setColor(both_disabled and { 0.4, 0.4, 0.4, 1 } or ui.color.text)
+  love.graphics.print("Both", both_x + 16, y + 8)
+  if not both_disabled then
+    table.insert(ui._modalRects, { x = both_x, y = y, w = canvas_btn_w, h = btn_h, action = "export_canvas_both" })
+  end
+
+  y = y + btn_h + 25
+
+  -- Export and Cancel buttons
+  local export_x = mx_pos + 16
+  local export_w = 100
+  local export_h = 35
+  local export_hover = (mx >= export_x and my >= y and mx < export_x + export_w and my < y + export_h)
+  love.graphics.setColor(export_hover and ui.color.ok or { 0.2, 0.6, 0.25, 1 })
+  love.graphics.rectangle("fill", export_x, y, export_w, export_h, 4, 4)
+  love.graphics.setColor(1, 1, 1, 1)
+  love.graphics.print("Export", export_x + 26, y + 10)
+  table.insert(ui._modalRects, { x = export_x, y = y, w = export_w, h = export_h, action = "perform_export" })
+
+  local cancel_x = export_x + export_w + 10
+  local cancel_hover = (mx >= cancel_x and my >= y and mx < cancel_x + export_w and my < y + export_h)
+  love.graphics.setColor(cancel_hover and { 0.35, 0.35, 0.35, 1 } or { 0.25, 0.25, 0.25, 1 })
+  love.graphics.rectangle("fill", cancel_x, y, export_w, export_h, 4, 4)
+  love.graphics.setColor(ui.color.text)
+  love.graphics.print("Cancel", cancel_x + 26, y + 10)
+  table.insert(ui._modalRects, { x = cancel_x, y = y, w = export_w, h = export_h, action = "cancel_export" })
+end
+
+-- Export toast notification
+function ui.draw_export_toast()
+  if not state.export.lastPath or not state.export.lastTime then
+    return
+  end
+
+  local elapsed = love.timer.getTime() - state.export.lastTime
+  if elapsed > 3 then
+    return
+  end
+
+  local alpha = math.min(1, (3 - elapsed) / 0.5) -- Fade out in last 0.5s
+  local filename = state.export.lastPath:match("([^/\\]+)$") or state.export.lastPath
+  local text = "Exported: " .. filename
+  local font = love.graphics.getFont()
+  local tw = font:getWidth(text)
+  local w = love.graphics.getWidth()
+  local x = math.floor((w - tw - 32) / 2)
+  local y = 60
+
+  love.graphics.setColor(0.2, 0.6, 0.3, 0.9 * alpha)
+  love.graphics.rectangle("fill", x, y, tw + 32, 32, 6, 6)
+  love.graphics.setColor(1, 1, 1, alpha)
+  love.graphics.print(text, x + 16, y + 8)
 end
 
 return ui

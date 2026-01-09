@@ -383,6 +383,64 @@ function sandbox.load_script()
   return true
 end
 
+-- Load encouraging error messages from JSON
+local error_messages = nil
+local function load_error_messages()
+  if error_messages then return error_messages end
+  
+  local json_path = "data/error_messages.json"
+  local file = io.open(json_path, "r")
+  if not file then
+    -- Fallback message if file can't be loaded
+    error_messages = { messages = { "Max consecutive errors reached. Time to reload and try again!" } }
+    return error_messages
+  end
+  
+  local content = file:read("*all")
+  file:close()
+  
+  -- Simple JSON parser for our specific structure
+  local messages = {}
+  for msg in content:gmatch('"([^"]+)"') do
+    -- Skip the "messages" key itself
+    if msg ~= "messages" then
+      table.insert(messages, msg)
+    end
+  end
+  
+  error_messages = { messages = messages }
+  return error_messages
+end
+
+-- Get a random encouraging message
+local function get_error_limit_message()
+  local msgs = load_error_messages()
+  if #msgs.messages == 0 then
+    return "Max consecutive errors reached. Time to reload and try again!"
+  end
+  math.randomseed(os.time() + state.tickCount)
+  return msgs.messages[math.random(1, #msgs.messages)]
+end
+
+-- Track repeated errors and return true if threshold exceeded
+local function track_error(err)
+  -- Normalize error: strip line numbers (e.g., ":123:"), memory addresses (0x...), and extra whitespace
+  local sig = tostring(err)
+    :gsub(":%d+:", ":")  -- Remove line numbers like ":123:"
+    :gsub(":%d+$", "")   -- Remove trailing line numbers
+    :gsub("0x%x+", "")   -- Remove memory addresses
+    :gsub("%s+", " ")    -- Normalize whitespace
+  
+  if sig == state.errorSignature then
+    state.errorCount = state.errorCount + 1
+  else
+    state.errorSignature = sig
+    state.errorCount = 1
+  end
+  
+  return state.errorCount >= state.maxErrorRepeats
+end
+
 local function safe_call(name)
   if not sandbox.env then
     return true
@@ -395,7 +453,14 @@ local function safe_call(name)
   if not ok then
     logger.append("[error] " .. name .. ": " .. tostring(err))
     state.lastError = err
-    if state.pauseOnError then
+    
+    -- Track repeated errors and pause if threshold exceeded
+    if track_error(err) then
+      logger.append("────────────────────────────────────────")
+      logger.append("[info] " .. get_error_limit_message())
+      logger.append("────────────────────────────────────────")
+      state.running = false
+    elseif state.pauseOnError then
       state.running = false
     end
     return false, err
@@ -412,7 +477,14 @@ function sandbox.tick()
     if not okSim then
       logger.append("[error] input_simulator onTick: " .. tostring(errSim))
       state.lastError = errSim
-      if state.pauseOnError then
+      
+      -- Track repeated errors and pause if threshold exceeded
+      if track_error(errSim) then
+        logger.append("────────────────────────────────────────")
+        logger.append("[info] " .. get_error_limit_message())
+        logger.append("────────────────────────────────────────")
+        state.running = false
+      elseif state.pauseOnError then
         state.running = false
       end
       -- still attempt user onTick afterward if running isn't paused
@@ -432,7 +504,14 @@ function sandbox.draw()
     if not okSim then
       logger.append("[error] input_simulator onDebugDraw: " .. tostring(errSim))
       state.lastError = errSim
-      if state.pauseOnError then
+      
+      -- Track repeated errors and pause if threshold exceeded
+      if track_error(errSim) then
+        logger.append("────────────────────────────────────────")
+        logger.append("[info] " .. get_error_limit_message())
+        logger.append("────────────────────────────────────────")
+        state.running = false
+      elseif state.pauseOnError then
         state.running = false
       end
     end
@@ -445,6 +524,8 @@ function sandbox.reload()
   if ok then
     logger.append("[info] Reloaded script")
     state.lastError = nil
+    state.errorCount = 0
+    state.errorSignature = nil
     return true
   else
     logger.append("[error] Reload failed: " .. tostring(err))
