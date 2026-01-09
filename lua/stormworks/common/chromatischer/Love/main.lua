@@ -503,16 +503,15 @@ function love.keypressed(key)
     return
   end
 
-  -- Handle search input
+  -- Handle search input - block all keybinds when search is active
   if state.logUI.searchActive then
     if key == "backspace" then
       state.logUI.searchText = state.logUI.searchText:sub(1, -2)
-      return
     elseif key == "escape" then
       state.logUI.searchActive = false
       state.logUI.searchText = ""
-      return
     end
+    return  -- Block all other keybinds when search box is active
   end
 
   if key == "space" then
