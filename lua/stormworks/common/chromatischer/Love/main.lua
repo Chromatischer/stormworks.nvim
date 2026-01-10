@@ -232,9 +232,22 @@ function love.load(args)
 
   -- Fonts
   local fontPath = "fonts/JetBrainsMono-Regular.ttf"
-  state.fonts.ui = love.graphics.newFont(fontPath, 13)
-  state.fonts.uiHeader = love.graphics.newFont(fontPath, 15)
-  state.fonts.mono = love.graphics.newFont(fontPath, 13)
+  local function loadFont(size)
+    -- Try to load custom font; fall back to default font if missing or failed
+    if love.filesystem.getInfo(fontPath, "file") then
+      local ok, font = pcall(love.graphics.newFont, fontPath, size)
+      if ok and font then
+        return font
+      end
+      logger.append("[warn] Failed to load font '" .. fontPath .. "': " .. tostring(font))
+    else
+      logger.append("[warn] Font file not found: " .. tostring(fontPath) .. " (using default font)")
+    end
+    return love.graphics.newFont(size)
+  end
+  state.fonts.ui = loadFont(13)
+  state.fonts.uiHeader = loadFont(15)
+  state.fonts.mono = loadFont(13)
   love.graphics.setFont(state.fonts.ui)
 
   -- Load user script before creating canvases so onAttatch() can configure sizes
