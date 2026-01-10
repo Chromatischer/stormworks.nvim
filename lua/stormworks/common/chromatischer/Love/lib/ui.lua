@@ -109,11 +109,17 @@ local function draw_rounded_button(x, y, w, h, color, hover)
 end
 
 -- Small toggle knob used by Inputs UI
-local function draw_bool_toggle(x, y, val)
+local function draw_bool_toggle(x, y, val, isSimDriven)
   local r = 12
-  love.graphics.setColor(0.15, 0.15, 0.15, 1)
+  -- Background: darker when simulator-driven
+  love.graphics.setColor(isSimDriven and {0.12, 0.12, 0.12, 1} or {0.15, 0.15, 0.15, 1})
   love.graphics.rectangle("fill", x - 15, y - 15, 30, 30, 3, 3)
-  love.graphics.setColor(val and ui.color.accent or { 0.25, 0.25, 0.25, 1 })
+  -- Circle: dimmed when simulator-driven
+  if val then
+    love.graphics.setColor(isSimDriven and {0.5, 0.3, 0.15, 1} or ui.color.accent)
+  else
+    love.graphics.setColor(isSimDriven and {0.18, 0.18, 0.18, 1} or {0.25, 0.25, 0.25, 1})
+  end
   love.graphics.circle("fill", x, y, r)
 end
 
@@ -597,28 +603,23 @@ local function draw_inputs_content(p)
       local by = boolInBaseY + row * 40
       local isSimDriven = state.simulatorDriven.inputB[i]
 
-      if isSimDriven then
-        -- Gray out background for simulator-controlled input
-        love.graphics.setColor(0.12, 0.12, 0.12, 0.8)
-        love.graphics.rectangle("fill", bx - 15, by - 15, 30, 30, 3, 3)
-      end
-
-      draw_bool_toggle(bx, by, state.inputB[i])
+      draw_bool_toggle(bx, by, state.inputB[i], isSimDriven)
       ui._boolRects[i] = { x = bx - 15, y = by - 15, w = 30, h = 30 }
 
-      -- Add "SIM" overlay for simulator-driven
+      -- Add centered label inside toggle
+      local font = love.graphics.getFont()
+      local fontHeight = font:getHeight()
       if isSimDriven then
-        love.graphics.setColor(ui.color.warn)
-        love.graphics.print("S", bx + 8, by - 10)
-      end
-
-      -- Add label inside toggle (only when inactive)
-      if not state.inputB[i] then
-        love.graphics.setColor(isSimDriven and {0.3, 0.3, 0.3, 1} or ui.color.textDim)
-        local labelText = string.format("%d", i)
-        local font = love.graphics.getFont()
+        -- Centered "S" overlay for simulator-driven: white when ON, orange when OFF
+        local labelText = "S"
         local labelWidth = font:getWidth(labelText)
-        local fontHeight = font:getHeight()
+        love.graphics.setColor(state.inputB[i] and ui.color.text or ui.color.warn)
+        love.graphics.print(labelText, bx - labelWidth/2, by - fontHeight/2)
+      elseif not state.inputB[i] then
+        -- Channel number only when inactive and not simulator-driven
+        local labelText = string.format("%d", i)
+        local labelWidth = font:getWidth(labelText)
+        love.graphics.setColor(ui.color.textDim)
         love.graphics.print(labelText, bx - labelWidth/2, by - fontHeight/2)
       end
       -- Add tooltip on hover
