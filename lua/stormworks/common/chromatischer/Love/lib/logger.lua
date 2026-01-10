@@ -6,22 +6,27 @@ local logger = {
   _file_path = nil,   -- path to active log file
 }
 
-local function append_line(text)
-  table.insert(logger.lines, text)
+local function append_line(text, source)
+  source = source or "system"
+  table.insert(logger.lines, {
+    text = tostring(text),
+    source = source,
+    timestamp = os.time()
+  })
   if #logger.lines > logger.max_lines then
     table.remove(logger.lines, 1)
   end
   -- Write-through to file if enabled
   if logger._fh then
-    if type(text) ~= 'string' then text = tostring(text) end
-    if not text:match("\n$") then text = text .. "\n" end
-    logger._fh:write(text)
+    local output = string.format("[%s] %s", source, tostring(text))
+    if not output:match("\n$") then output = output .. "\n" end
+    logger._fh:write(output)
     logger._fh:flush()
   end
 end
 
-function logger.append(text)
-  append_line(text)
+function logger.append(text, source)
+  append_line(text, source or "system")
   -- Echo to console as well, so crashes during attach or simulator phases are visible in terminal
   if type(text) ~= 'string' then text = tostring(text) end
   if text and #text > 0 then
@@ -32,7 +37,7 @@ end
 
 function logger.printf(fmt, ...)
   local line = string.format(fmt, ...)
-  append_line(line)
+  append_line(line, "system")
   if orig_print then orig_print(line) end
 end
 

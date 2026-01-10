@@ -7,6 +7,7 @@ local library = require("stormworks.modules.library")
 local build = require("stormworks.modules.build")
 local commands = require("stormworks.modules.commands")
 local love_runner = require("stormworks.modules.love_runner")
+local headless = require("stormworks.modules.headless")
 local keys = require("stormworks.modules.keys")
 
 local M = {}
@@ -22,6 +23,8 @@ M.build_micro_project = build.build_micro_project
 M.create_commands = commands.create_commands
 M.setup_autodetection = commands.setup_autodetection
 M.run_love_ui = love_runner.run_current_script
+M.export_debug_image = headless.export
+M.export_debug_image_sync = headless.export_sync
 M.register_keymaps = keys.register_keymaps
 
 -- Setup function called by user in their config

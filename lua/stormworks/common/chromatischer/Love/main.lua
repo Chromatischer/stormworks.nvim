@@ -95,6 +95,9 @@ local function parse_args(args)
         state.cliOverrides.debugCanvas = true
       end
       i = i + 2
+    elseif a == "--max-error-repeats" and args[i + 1] then
+      state.maxErrorRepeats = tonumber(args[i + 1]) or state.maxErrorRepeats
+      i = i + 2
     elseif a == "--props" and args[i + 1] then
       local s = args[i + 1]
       for key, val in s:gmatch("([^,=]+)=([^,]+)") do
@@ -125,6 +128,55 @@ function love.load(args)
   end
   logger.install_print_capture()
   parse_args(args or {})
+  
+  -- Check for headless mode
+  local headless_config = nil
+  for _, arg in ipairs(args or {}) do
+    if arg == "--headless" then
+      local headless_module = require("lib.headless")
+      headless_config = headless_module.parse_args(args, state)
+      break
+    end
+  end
+  
+  if headless_config and headless_config.enabled then
+    -- Headless mode: run and export, then exit
+    local headless_module = require("lib.headless")
+    
+    -- Expand package.path for lib roots (same as normal mode)
+    do
+      local parts = {}
+      for _, root in ipairs(state.libPaths or {}) do
+        local r = tostring(root):gsub("/+$", "")
+        table.insert(parts, r .. "/?.lua")
+        table.insert(parts, r .. "/?/init.lua")
+      end
+      if #parts > 0 then
+        package.path = table.concat(parts, ";") .. ";" .. package.path
+      end
+    end
+    
+    -- Load user script
+    local ok, err = sandbox.load_script()
+    if not ok then
+      local result = {
+        success = false,
+        errors = {"Failed to load script: " .. tostring(err)},
+        ticks_run = 0,
+        outputs = {},
+        images = {},
+      }
+      headless_module.write_result(result, headless_config)
+      love.event.quit(1)
+      return
+    end
+    
+    -- Run headless export
+    local success = headless_module.run(state, sandbox, canvases, headless_config)
+    love.event.quit(success and 0 or 1)
+    return
+  end
+  
   -- Debug: print lib roots and resulting package.path for troubleshooting
   do
     print("LIB ROOTS (raw):")
@@ -179,8 +231,23 @@ function love.load(args)
   end
 
   -- Fonts
-  state.fonts.ui = love.graphics.newFont(13)
-  state.fonts.mono = love.graphics.newFont(13)
+  local fontPath = "fonts/JetBrainsMono-Regular.ttf"
+  local function loadFont(size)
+    -- Try to load custom font; fall back to default font if missing or failed
+    if love.filesystem.getInfo(fontPath, "file") then
+      local ok, font = pcall(love.graphics.newFont, fontPath, size)
+      if ok and font then
+        return font
+      end
+      logger.append("[warn] Failed to load font '" .. fontPath .. "': " .. tostring(font))
+    else
+      logger.append("[warn] Font file not found: " .. tostring(fontPath) .. " (using default font)")
+    end
+    return love.graphics.newFont(size)
+  end
+  state.fonts.ui = loadFont(13)
+  state.fonts.uiHeader = loadFont(15)
+  state.fonts.mono = loadFont(13)
   love.graphics.setFont(state.fonts.ui)
 
   -- Load user script before creating canvases so onAttatch() can configure sizes
@@ -203,6 +270,69 @@ local function try_tick()
   local ok = sandbox.tick()
   if ok then
     state.tickCount = state.tickCount + 1
+  end
+end
+
+-- Perform canvas export
+local function perform_export()
+  local headless = require("lib.headless")
+  local format = state.export.format or "png"
+  local capture = state.export.capture or "game"
+
+  -- Determine base directory (script directory or cwd)
+  local base_dir = nil
+  if state.scriptPath then
+    base_dir = state.scriptPath:match("^(.*)/[^/]+$")
+  end
+
+  local results = {}
+  local errors = {}
+
+  if capture == "both" then
+    -- Export both canvases
+    local game_path = headless.generate_export_path(base_dir, "game", format)
+    local debug_path = headless.generate_export_path(base_dir, "debug", format)
+
+    local ok1, err1 = headless.export_canvas(canvases.game, game_path, format)
+    local ok2, err2 = headless.export_canvas(canvases.debug, debug_path, format)
+
+    if ok1 then
+      table.insert(results, game_path)
+    else
+      table.insert(errors, "Export game failed: " .. tostring(err1))
+    end
+
+    if ok2 then
+      table.insert(results, debug_path)
+    else
+      table.insert(errors, "Export debug failed: " .. tostring(err2))
+    end
+  else
+    -- Export single canvas
+    local canvas = (capture == "game") and canvases.game or canvases.debug
+    local path = headless.generate_export_path(base_dir, capture, format)
+
+    local ok, err = headless.export_canvas(canvas, path, format)
+    if ok then
+      table.insert(results, path)
+    else
+      table.insert(errors, "Export failed: " .. tostring(err))
+    end
+  end
+
+  -- Show results
+  if #results > 0 then
+    state.export.lastPath = results[1]
+    state.export.lastTime = love.timer.getTime()
+    state.export.showModal = false
+    for _, path in ipairs(results) do
+      logger.append("[info] Exported: " .. path)
+    end
+  end
+
+  -- Show errors
+  for _, err in ipairs(errors) do
+    logger.append("[error] " .. err)
   end
 end
 
@@ -256,6 +386,12 @@ function love.update(dt)
   elseif state.singleStep then
     try_tick()
     state.singleStep = false
+  end
+
+  -- Check if export was requested
+  if state.export.doExport then
+    state.export.doExport = false
+    perform_export()
   end
 end
 
@@ -366,6 +502,10 @@ function love.draw()
     love.graphics.print("ERROR: " .. tostring(state.lastError), 16, 48)
   end
 
+  -- Draw export modal and toast (on top of everything)
+  ui.draw_export_modal()
+  ui.draw_export_toast()
+
   -- Update detached frame writers after rendering
   detach.update()
 end
@@ -377,8 +517,25 @@ function love.keypressed(key)
     end
     return
   end
+
+  -- Handle search input - block all keybinds when search is active
+  if state.logUI.searchActive then
+    if key == "backspace" then
+      state.logUI.searchText = state.logUI.searchText:sub(1, -2)
+    elseif key == "escape" then
+      state.logUI.searchActive = false
+      state.logUI.searchText = ""
+    end
+    return  -- Block all other keybinds when search box is active
+  end
+
   if key == "space" then
     state.running = not state.running
+    -- Reset error tracking when manually resuming
+    if state.running then
+      state.errorCount = 0
+      state.errorSignature = nil
+    end
   elseif key == "n" then
     state.singleStep = true
   elseif key == "r" then
@@ -407,6 +564,18 @@ function love.keypressed(key)
   elseif key == "[" then
     local factor = (love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")) and 10 or 20
     state.tickRate = math.min(480, math.max(10, math.floor(state.tickRate - factor)))
+  elseif key == "e" then
+    state.export.showModal = not state.export.showModal
+  elseif key == "escape" then
+    if state.export.showModal then
+      state.export.showModal = false
+    end
+  end
+end
+
+function love.textinput(text)
+  if state.logUI.searchActive then
+    state.logUI.searchText = state.logUI.searchText .. text
   end
 end
 
