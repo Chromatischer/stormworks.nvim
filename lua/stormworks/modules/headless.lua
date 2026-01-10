@@ -272,8 +272,8 @@ function M.export_sync(opts)
     return vim.fn.shellescape(arg)
   end, cli), " ") .. " > " .. vim.fn.shellescape(stdout_file) .. " 2> " .. vim.fn.shellescape(stderr_file)
   
-  local exit_code = vim.fn.system(cmd)
-  exit_code = vim.v.shell_error
+  vim.fn.system(cmd)
+  local exit_code = vim.v.shell_error
   
   -- Read stdout
   local stdout_lines = {}
