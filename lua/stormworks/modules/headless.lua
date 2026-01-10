@@ -232,9 +232,7 @@ function M.export_sync(opts)
 
   -- Ensure absolute path for script
   local script_path = opts.script
-  if not script_path:match("^/") then
-    script_path = vim.fn.fnamemodify(script_path, ":p")
-  end
+  script_path = vim.fn.fnamemodify(script_path, ":p")
   opts.script = script_path
 
   -- Find Love binary
