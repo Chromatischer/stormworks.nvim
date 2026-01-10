@@ -231,8 +231,10 @@ function love.load(args)
   end
 
   -- Fonts
-  state.fonts.ui = love.graphics.newFont(13)
-  state.fonts.mono = love.graphics.newFont(13)
+  local fontPath = "fonts/JetBrainsMono-Regular.ttf"
+  state.fonts.ui = love.graphics.newFont(fontPath, 13)
+  state.fonts.uiHeader = love.graphics.newFont(fontPath, 15)
+  state.fonts.mono = love.graphics.newFont(fontPath, 13)
   love.graphics.setFont(state.fonts.ui)
 
   -- Load user script before creating canvases so onAttatch() can configure sizes

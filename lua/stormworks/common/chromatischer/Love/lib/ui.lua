@@ -109,11 +109,26 @@ end
 
 -- Small toggle knob used by Inputs UI
 local function draw_bool_toggle(x, y, val)
-  local r = 8
+  local r = 12
   love.graphics.setColor(0.15, 0.15, 0.15, 1)
-  love.graphics.rectangle("fill", x - 10, y - 10, 20, 20, 3, 3)
-  love.graphics.setColor(val and ui.color.ok or { 0.25, 0.25, 0.25, 1 })
+  love.graphics.rectangle("fill", x - 15, y - 15, 30, 30, 3, 3)
+  love.graphics.setColor(val and ui.color.accent or { 0.25, 0.25, 0.25, 1 })
   love.graphics.circle("fill", x, y, r)
+end
+
+-- Section separator line
+local function draw_section_separator(x, y, width)
+  love.graphics.setColor(1, 0.6, 0.3, 0.15) -- Orange with 15% opacity
+  love.graphics.setLineWidth(1)
+  love.graphics.line(x + 8, y, x + width - 8, y)
+end
+
+-- Section header with orange accent color
+local function draw_section_header(x, y, headerText)
+  love.graphics.setFont(state.fonts.uiHeader)
+  love.graphics.setColor(ui.color.accent) -- Orange
+  love.graphics.print(headerText, x, y)
+  love.graphics.setFont(state.fonts.ui) -- Reset to normal font
 end
 
 -- Icon: pop-out (undock). Draws a small window with a NE arrow escaping.
@@ -547,8 +562,9 @@ local function draw_inputs_content(p)
   end
 
   -- Bool inputs (click to toggle)
-  text(p.x + 8, p.y + NAV_H + contentYOffset + 6, "Bool Inputs")
-  local boolInBaseY = p.y + NAV_H + contentYOffset + 6 + fontH + labelPad
+  draw_section_header(p.x + 8, p.y + NAV_H + contentYOffset + 6, "Bool Inputs")
+  local headerH = state.fonts.uiHeader:getHeight()
+  local boolInBaseY = p.y + NAV_H + contentYOffset + 6 + headerH + 12
   ui._boolRects = {}
   local mx, my = love.mouse.getPosition()
 
@@ -556,18 +572,18 @@ local function draw_inputs_content(p)
     if channelSet[i] then
       local col = (i - 1) % 8
       local row = math.floor((i - 1) / 8)
-      local bx = p.x + 18 + col * 28
-      local by = boolInBaseY + row * 24
+      local bx = p.x + 24 + col * 38
+      local by = boolInBaseY + row * 40
       local isSimDriven = state.simulatorDriven.inputB[i]
 
       if isSimDriven then
         -- Gray out background for simulator-controlled input
         love.graphics.setColor(0.12, 0.12, 0.12, 0.8)
-        love.graphics.rectangle("fill", bx - 12, by - 12, 24, 24, 3, 3)
+        love.graphics.rectangle("fill", bx - 15, by - 15, 30, 30, 3, 3)
       end
 
       draw_bool_toggle(bx, by, state.inputB[i])
-      ui._boolRects[i] = { x = bx - 12, y = by - 12, w = 24, h = 24 }
+      ui._boolRects[i] = { x = bx - 15, y = by - 15, w = 30, h = 30 }
 
       -- Add "SIM" overlay for simulator-driven
       if isSimDriven then
@@ -575,11 +591,17 @@ local function draw_inputs_content(p)
         love.graphics.print("S", bx + 8, by - 10)
       end
 
-      -- Add label below toggle
-      love.graphics.setColor(isSimDriven and {0.3, 0.3, 0.3, 1} or ui.color.textDim)
-      love.graphics.print(string.format("B%d", i), bx - 8, by + 14)
+      -- Add label inside toggle (only when inactive)
+      if not state.inputB[i] then
+        love.graphics.setColor(isSimDriven and {0.3, 0.3, 0.3, 1} or ui.color.textDim)
+        local labelText = string.format("%d", i)
+        local font = love.graphics.getFont()
+        local labelWidth = font:getWidth(labelText)
+        local fontHeight = font:getHeight()
+        love.graphics.print(labelText, bx - labelWidth/2, by - fontHeight/2)
+      end
       -- Add tooltip on hover
-      if mx >= bx - 12 and my >= by - 12 and mx < bx + 12 and my < by + 12 then
+      if mx >= bx - 15 and my >= by - 15 and mx < bx + 15 and my < by + 15 then
         local tooltipText = isSimDriven and string.format("Boolean Input %d\nControlled by simulator", i)
                                           or string.format("Boolean Input %d\nClick to toggle", i)
         set_tooltip(tooltipText)
@@ -588,15 +610,17 @@ local function draw_inputs_content(p)
   end
 
   -- Number inputs (sliders 0..1)
-  local numInLabelY = boolInBaseY + 4 * 24 + 16
-  text(p.x + 8, numInLabelY, "Number Inputs (0..1)")
+  local separatorY = boolInBaseY + 4 * 40 + 20
+  draw_section_separator(p.x, separatorY, p.w)
+  local numInLabelY = separatorY + 20
+  draw_section_header(p.x + 8, numInLabelY, "Number Inputs (0..1)")
   ui._numRects = {}
   local sx = p.x + 8
-  local sy = numInLabelY + fontH + labelPad
+  local sy = numInLabelY + headerH + 12
   local colW = (p.w - 16 - 8) / 2
   local sW = colW - 48 -- shrink slider width to leave space for value text to the right
   local sH = 12
-  local rowGap = sH + 18 -- generous vertical spacing
+  local rowGap = sH + 22 -- generous vertical spacing
 
   for i = 1, 32 do
     if channelSet[i] then
@@ -621,8 +645,10 @@ local function draw_inputs_content(p)
       love.graphics.setColor(isSimDriven and {0.12, 0.12, 0.12, 1} or {0.2, 0.2, 0.2, 1})
       love.graphics.rectangle("fill", rx, ry, sW, sH, 2, 2)
       -- Slider fill (dimmed if simulator-driven)
-      love.graphics.setColor(isSimDriven and {0.5, 0.3, 0.15, 1} or ui.color.accent)
-      love.graphics.rectangle("fill", rx, ry, sW * v, sH, 2, 2)
+      if v > 0 then
+        love.graphics.setColor(isSimDriven and {0.5, 0.3, 0.15, 1} or ui.color.accent)
+        love.graphics.rectangle("fill", rx, ry, sW * v, sH, 2, 2)
+      end
       -- Slider border
       love.graphics.setColor(isSimDriven and {0.3, 0.3, 0.3, 1} or ui.color.text)
       love.graphics.rectangle("line", rx, ry, sW, sH, 2, 2)
@@ -654,28 +680,37 @@ local function draw_outputs_content(p)
   end
 
   -- Bool outputs
-  text(p.x + 8, p.y + NAV_H + contentYOffset + 6, "Bool Outputs")
-  local boolOutBaseY = p.y + NAV_H + contentYOffset + 6 + fontH + labelPad
+  draw_section_header(p.x + 8, p.y + NAV_H + contentYOffset + 6, "Bool Outputs")
+  local headerH = state.fonts.uiHeader:getHeight()
+  local boolOutBaseY = p.y + NAV_H + contentYOffset + 6 + headerH + 12
 
   for i = 1, 32 do
     if channelSet[i] then
       local col = (i - 1) % 8
       local row = math.floor((i - 1) / 8)
-      local bx = p.x + 18 + col * 28
-      local by = boolOutBaseY + row * 24
-      love.graphics.setColor(state.outputB[i] and ui.color.ok or { 0.2, 0.2, 0.2, 1 })
-      love.graphics.circle("fill", bx, by, 6)
-      -- Add label below output
-      love.graphics.setColor(ui.color.textDim)
-      love.graphics.print(string.format("B%d", i), bx - 8, by + 10)
+      local bx = p.x + 24 + col * 38
+      local by = boolOutBaseY + row * 40
+      love.graphics.setColor(state.outputB[i] and ui.color.accent or { 0.2, 0.2, 0.2, 1 })
+      love.graphics.circle("fill", bx, by, 10)
+      -- Add label inside output (only when inactive)
+      if not state.outputB[i] then
+        love.graphics.setColor(ui.color.textDim)
+        local labelText = string.format("%d", i)
+        local font = love.graphics.getFont()
+        local labelWidth = font:getWidth(labelText)
+        local fontHeight = font:getHeight()
+        love.graphics.print(labelText, bx - labelWidth/2, by - fontHeight/2)
+      end
     end
   end
 
   -- Number outputs (text)
-  local outLabelY = boolOutBaseY + 4 * 24 + 16
-  text(p.x + 8, outLabelY, "Number Outputs")
+  local separatorY = boolOutBaseY + 4 * 40 + 20
+  draw_section_separator(p.x, separatorY, p.w)
+  local outLabelY = separatorY + 20
+  draw_section_header(p.x + 8, outLabelY, "Number Outputs")
   local sx = p.x + 8
-  local oy = outLabelY + fontH + 4
+  local oy = outLabelY + headerH + 12
   local colW = (p.w - 16 - 8) / 2
 
   for i = 1, 32 do
@@ -694,7 +729,7 @@ function ui.layout(w, h)
   ui.panels.toolbar = { x = 12, y = 12, w = w - 24, h = 28 }
 
   -- Bottom section: log at bottom (hide if minimized)
-  local logH_full = math.min(140, math.floor(h * 0.18))
+  local logH_full = math.min(200, math.floor(h * 0.25))
   local logH = ui.minimized.log and COLLAPSE_H or logH_full
   ui.panels.log = { x = 12, y = h - (logH + 12), w = w - 24, h = logH }
 
@@ -1132,7 +1167,7 @@ function ui.draw_log(logger)
       local scrollBarH = p.h - NAV_H - 8
       local thumbH = math.max(20, scrollBarH * (visibleLines / filteredCount))
       local scrollRange = filteredCount - visibleLines
-      local thumbY = scrollBarY + (scrollBarH - thumbH) * (state.logUI.scrollOffset / scrollRange)
+      local thumbY = scrollBarY + (scrollBarH - thumbH) * (1 - state.logUI.scrollOffset / scrollRange)
 
       -- Track
       love.graphics.setColor(0.15, 0.15, 0.15, 0.8)
@@ -1148,8 +1183,22 @@ function ui.draw_log(logger)
     local padx, pady = 8, 6
     local text = ui._hoverTip.text
     local font = love.graphics.getFont()
-    local tw = font:getWidth(text)
-    local th = font:getHeight()
+
+    -- Split text by newlines and measure properly
+    local lines = {}
+    for line in (text .. "\n"):gmatch("(.-)\n") do
+      table.insert(lines, line)
+    end
+
+    local tw = 0
+    for _, line in ipairs(lines) do
+      local lw = font:getWidth(line)
+      if lw > tw then tw = lw end
+    end
+
+    local lineHeight = font:getHeight()
+    local th = lineHeight * #lines
+
     local x = ui._hoverTip.x
     local y = ui._hoverTip.y
     -- keep on screen
@@ -1160,12 +1209,18 @@ function ui.draw_log(logger)
     if y + th + pady * 2 > wh - 8 then
       y = wh - (th + pady * 2) - 8
     end
+
+    -- Background
     love.graphics.setColor(0, 0, 0, 0.8)
     love.graphics.rectangle("fill", x, y, tw + padx * 2, th + pady * 2, 4, 4)
     love.graphics.setColor(1, 1, 1, 0.15)
     love.graphics.rectangle("line", x + 0.5, y + 0.5, tw + padx * 2 - 1, th + pady * 2 - 1, 4, 4)
+
+    -- Print each line
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.print(text, x + padx, y + pady)
+    for i, line in ipairs(lines) do
+      love.graphics.print(line, x + padx, y + pady + (i - 1) * lineHeight)
+    end
   end
 end
 
@@ -1436,7 +1491,7 @@ function ui.wheelmoved(dx, dy)
     end
 
     if not state.logUI.autoScroll then
-      state.logUI.scrollOffset = math.max(0, state.logUI.scrollOffset - dy * 3)
+      state.logUI.scrollOffset = math.max(0, state.logUI.scrollOffset - dy)
       -- Clamp to max scroll
       local logger = require("lib.logger")
       local lines = logger.getLines(1000)
