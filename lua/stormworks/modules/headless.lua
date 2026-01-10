@@ -358,7 +358,10 @@ function M.export(opts)
 
   -- Ensure absolute path for script
   local script_path = opts.script
-  if not script_path:match("^/") then
+  local is_absolute = script_path:match("^/")           -- Unix-like
+    or script_path:match("^%a:[/\\]")                   -- Windows drive letter (e.g., C:\ or D:/)
+    or script_path:match("^\\\\")                       -- Windows UNC path (e.g., \\server\share)
+  if not is_absolute then
     script_path = vim.fn.fnamemodify(script_path, ":p")
   end
   opts.script = script_path
