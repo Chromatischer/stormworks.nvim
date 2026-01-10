@@ -61,7 +61,8 @@ ui._numRects = {}
 ui._activeSlider = nil
 ui._navRects = {}
 ui._toolbarRects = {}
-ui.leftTab = "inputs" -- for merged mode (Inputs | Outputs)
+ui.leftTab = "inputs" -- for merged mode (Inputs | Outputs | Inspector)
+ui.rightTab = "outputs" -- for non-merged mode (Outputs | Inspector)
 ui._hoverTip = nil
 ui.minimized = { inputs = false, outputs = false, game = false, debug = false, log = false }
 
@@ -197,32 +198,52 @@ local function draw_nav_bar(p, title, which)
   ui._navRects = ui._navRects or {}
 
   if which == "left" and ui.mergedOutputs then
-    -- Split header into two equal clickable halves: I | O
-    local mid = p.x + math.floor(p.w / 2)
-    local leftR = { x = p.x, y = p.y, w = mid - p.x, h = NAV_H }
-    local rightR = { x = mid, y = p.y, w = p.x + p.w - mid, h = NAV_H }
+    -- Split header into three equal clickable parts: I | O | Insp
+    local third = math.floor(p.w / 3)
+    local tabRects = {
+      { x = p.x, y = p.y, w = third, h = NAV_H, label = "I", tab = "inputs" },
+      { x = p.x + third, y = p.y, w = third, h = NAV_H, label = "O", tab = "outputs" },
+      { x = p.x + third * 2, y = p.y, w = p.w - third * 2, h = NAV_H, label = "Insp", tab = "inspector" },
+    }
 
-    -- Left half (I)
-    local leftActive = (ui.leftTab == "inputs")
-    love.graphics.setColor(leftActive and ui.color.accent or { 0.22, 0.22, 0.26, 1 })
-    love.graphics.rectangle("fill", leftR.x, leftR.y, leftR.w, leftR.h, 4, 4)
-    love.graphics.setColor(1, 1, 1, leftActive and 1 or 0.85)
-    love.graphics.printf("I", leftR.x, leftR.y + 3, leftR.w, "center")
-    ui._navRects["left_tab_inputs"] =
-      { x = leftR.x, y = leftR.y, w = leftR.w, h = leftR.h, action = "left_tab", tab = "inputs" }
+    for _, tabDef in ipairs(tabRects) do
+      local isActive = (ui.leftTab == tabDef.tab)
+      love.graphics.setColor(isActive and ui.color.accent or { 0.22, 0.22, 0.26, 1 })
+      love.graphics.rectangle("fill", tabDef.x, tabDef.y, tabDef.w, tabDef.h, 4, 4)
+      love.graphics.setColor(1, 1, 1, isActive and 1 or 0.85)
+      love.graphics.printf(tabDef.label, tabDef.x, tabDef.y + 3, tabDef.w, "center")
+      ui._navRects["left_tab_" .. tabDef.tab] =
+        { x = tabDef.x, y = tabDef.y, w = tabDef.w, h = tabDef.h, action = "left_tab", tab = tabDef.tab }
+    end
 
-    -- Right half (O)
-    local rightActive = (ui.leftTab == "outputs")
-    love.graphics.setColor(rightActive and ui.color.accent or { 0.22, 0.22, 0.26, 1 })
-    love.graphics.rectangle("fill", rightR.x, rightR.y, rightR.w, rightR.h, 4, 4)
-    love.graphics.setColor(1, 1, 1, rightActive and 1 or 0.85)
-    love.graphics.printf("O", rightR.x, rightR.y + 3, rightR.w, "center")
-    ui._navRects["left_tab_outputs"] =
-      { x = rightR.x, y = rightR.y, w = rightR.w, h = rightR.h, action = "left_tab", tab = "outputs" }
-
-    -- Divider line in middle for clarity
+    -- Divider lines between tabs
     love.graphics.setColor(0, 0, 0, 0.25)
-    love.graphics.line(mid, p.y + 2, mid, p.y + NAV_H - 2)
+    love.graphics.line(p.x + third, p.y + 2, p.x + third, p.y + NAV_H - 2)
+    love.graphics.line(p.x + third * 2, p.y + 2, p.x + third * 2, p.y + NAV_H - 2)
+  elseif which == "outputs" then
+    -- Split header into two clickable halves: O | Insp (non-merged mode)
+    -- Reserve space for minimize button on right
+    local btnSpace = 24
+    local availW = p.w - btnSpace
+    local half = math.floor(availW / 2)
+    local tabRects = {
+      { x = p.x, y = p.y, w = half, h = NAV_H, label = "O", tab = "outputs" },
+      { x = p.x + half, y = p.y, w = availW - half, h = NAV_H, label = "Insp", tab = "inspector" },
+    }
+
+    for _, tabDef in ipairs(tabRects) do
+      local isActive = (ui.rightTab == tabDef.tab)
+      love.graphics.setColor(isActive and ui.color.accent or { 0.22, 0.22, 0.26, 1 })
+      love.graphics.rectangle("fill", tabDef.x, tabDef.y, tabDef.w, tabDef.h, 4, 4)
+      love.graphics.setColor(1, 1, 1, isActive and 1 or 0.85)
+      love.graphics.printf(tabDef.label, tabDef.x, tabDef.y + 3, tabDef.w, "center")
+      ui._navRects["right_tab_" .. tabDef.tab] =
+        { x = tabDef.x, y = tabDef.y, w = tabDef.w, h = tabDef.h, action = "right_tab", tab = tabDef.tab }
+    end
+
+    -- Divider line between tabs
+    love.graphics.setColor(0, 0, 0, 0.25)
+    love.graphics.line(p.x + half, p.y + 2, p.x + half, p.y + NAV_H - 2)
   else
     -- Standard title
     love.graphics.setColor(ui.color.text)
@@ -725,6 +746,251 @@ local function draw_outputs_content(p)
   end
 end
 
+-- Inspector panel: tree view of script globals and simulator state
+local inspector_builtin_globals = {
+  -- Safe globals from sandbox
+  ["assert"] = true, ["error"] = true, ["ipairs"] = true, ["next"] = true,
+  ["pairs"] = true, ["pcall"] = true, ["select"] = true, ["tonumber"] = true,
+  ["tostring"] = true, ["type"] = true, ["unpack"] = true, ["xpcall"] = true,
+  ["print"] = true,
+  -- Safe tables
+  ["math"] = true, ["string"] = true, ["table"] = true,
+  -- Stormworks API
+  ["input"] = true, ["output"] = true, ["property"] = true, ["screen"] = true,
+  ["dbg"] = true, ["time"] = true,
+  -- Internal
+  ["_G"] = true, ["require"] = true, ["_input_simulator_typehint"] = true,
+  -- Callback functions (user-defined but not data)
+  ["onTick"] = true, ["onDraw"] = true, ["onAttatch"] = true, ["onDebugDraw"] = true,
+}
+
+local function is_array(t)
+  if type(t) ~= "table" then return false end
+  local count = 0
+  for _ in pairs(t) do count = count + 1 end
+  return count == #t and count > 0
+end
+
+local function format_value(v, maxLen)
+  maxLen = maxLen or 30
+  local t = type(v)
+  local str
+  if t == "string" then
+    str = '"' .. v:gsub("\n", "\\n"):gsub("\r", "\\r") .. '"'
+  elseif t == "number" then
+    if v == math.floor(v) then
+      str = tostring(v)
+    else
+      str = string.format("%.4g", v)
+    end
+  elseif t == "boolean" then
+    str = v and "true" or "false"
+  elseif t == "nil" then
+    str = "nil"
+  elseif t == "table" then
+    if is_array(v) then
+      str = string.format("[array:%d]", #v)
+    else
+      local count = 0
+      for _ in pairs(v) do count = count + 1 end
+      str = string.format("{table:%d}", count)
+    end
+  elseif t == "function" then
+    str = "<function>"
+  else
+    str = "<" .. t .. ">"
+  end
+  if #str > maxLen then
+    str = str:sub(1, maxLen - 3) .. "..."
+  end
+  return str
+end
+
+-- Hit regions for inspector tree nodes
+ui._inspectorRects = {}
+
+local function draw_tree_node(p, path, key, value, indent, y, contentX, contentW)
+  local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
+  local lineH = fontH + 4
+  local indentPx = indent * 16
+  local x = contentX + indentPx
+
+  -- Check if visible (within scissor region)
+  local panelTop = p.y + NAV_H
+  local panelBottom = p.y + p.h
+  if y + lineH < panelTop or y > panelBottom then
+    -- Still need to count lines for layout, but skip drawing
+    local drawnLines = 1
+    if type(value) == "table" and state.inspector.expanded[path] then
+      local sorted_keys = {}
+      for k in pairs(value) do table.insert(sorted_keys, k) end
+      table.sort(sorted_keys, function(a, b)
+        if type(a) == type(b) then
+          if type(a) == "number" then return a < b end
+          return tostring(a) < tostring(b)
+        end
+        return type(a) == "number"
+      end)
+      for _, k in ipairs(sorted_keys) do
+        local childPath = path .. "." .. tostring(k)
+        local _, childLines = draw_tree_node(p, childPath, k, value[k], indent + 1, y + drawnLines * lineH, contentX, contentW)
+        drawnLines = drawnLines + childLines
+      end
+    end
+    return y + lineH, drawnLines
+  end
+
+  local isTable = type(value) == "table"
+  local isExpanded = state.inspector.expanded[path]
+
+  -- Draw expand/collapse indicator for tables
+  if isTable then
+    local indicator = isExpanded and "v" or ">"
+    love.graphics.setColor(ui.color.textDim)
+    love.graphics.print(indicator, x, y)
+  end
+
+  -- Draw key
+  local keyX = x + (isTable and 12 or 0)
+  local keyStr = type(key) == "number" and string.format("[%d]", key) or tostring(key)
+  love.graphics.setColor(ui.color.accent)
+  love.graphics.print(keyStr, keyX, y)
+
+  -- Draw colon and value
+  local font = love.graphics.getFont()
+  local keyW = font:getWidth(keyStr)
+  local valX = keyX + keyW + 4
+  love.graphics.setColor(ui.color.textDim)
+  love.graphics.print(":", valX, y)
+  valX = valX + 8
+
+  local maxValW = contentX + contentW - valX - 8
+  local valStr = format_value(value, math.floor(maxValW / 7))
+  if isTable then
+    love.graphics.setColor(ui.color.text)
+  else
+    local t = type(value)
+    if t == "number" then
+      love.graphics.setColor(0.6, 0.8, 1, 1)
+    elseif t == "string" then
+      love.graphics.setColor(0.8, 1, 0.6, 1)
+    elseif t == "boolean" then
+      love.graphics.setColor(1, 0.7, 0.5, 1)
+    else
+      love.graphics.setColor(ui.color.textDim)
+    end
+  end
+  love.graphics.print(valStr, valX, y)
+
+  -- Register hit region for expandable nodes
+  if isTable then
+    ui._inspectorRects[path] = {
+      x = x, y = y, w = contentW - indentPx, h = lineH,
+      action = "toggle_expand", path = path
+    }
+  end
+
+  -- Recursively draw children if expanded
+  local drawnLines = 1
+  if isTable and isExpanded then
+    local sorted_keys = {}
+    for k in pairs(value) do table.insert(sorted_keys, k) end
+    table.sort(sorted_keys, function(a, b)
+      if type(a) == type(b) then
+        if type(a) == "number" then return a < b end
+        return tostring(a) < tostring(b)
+      end
+      return type(a) == "number"
+    end)
+    for _, k in ipairs(sorted_keys) do
+      local childPath = path .. "." .. tostring(k)
+      local _, childLines = draw_tree_node(p, childPath, k, value[k], indent + 1, y + drawnLines * lineH, contentX, contentW)
+      drawnLines = drawnLines + childLines
+    end
+  end
+
+  return y + lineH, drawnLines
+end
+
+local function draw_inspector_content(p)
+  local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
+  local lineH = fontH + 4
+  local headerH = state.fonts.uiHeader and state.fonts.uiHeader:getHeight() or fontH
+
+  -- Clear previous hit regions
+  ui._inspectorRects = {}
+
+  local contentX = p.x + 8
+  local contentW = p.w - 16
+  local y = p.y + NAV_H + 8 - (state.inspector.scrollOffset * lineH)
+
+  -- Section: Script Globals
+  if y + headerH > p.y + NAV_H then
+    draw_section_header(contentX, y, "Script Globals")
+  end
+  y = y + headerH + 8
+
+  -- Gather script globals (excluding built-ins)
+  local scriptGlobals = {}
+  if sandbox.env then
+    for k, v in pairs(sandbox.env) do
+      if not inspector_builtin_globals[k] then
+        table.insert(scriptGlobals, { key = k, value = v })
+      end
+    end
+  end
+  table.sort(scriptGlobals, function(a, b) return tostring(a.key) < tostring(b.key) end)
+
+  if #scriptGlobals == 0 then
+    love.graphics.setColor(ui.color.textDim)
+    love.graphics.print("(no globals)", contentX + 8, y)
+    y = y + lineH
+  else
+    for _, item in ipairs(scriptGlobals) do
+      local path = "script." .. tostring(item.key)
+      local _, lines = draw_tree_node(p, path, item.key, item.value, 0, y, contentX, contentW)
+      y = y + lines * lineH
+    end
+  end
+
+  -- Section: Simulator (if present)
+  if sandbox.sim then
+    y = y + 12
+    draw_section_separator(p.x, y, p.w)
+    y = y + 12
+
+    if y + headerH > p.y + NAV_H then
+      draw_section_header(contentX, y, "Simulator")
+    end
+    y = y + headerH + 8
+
+    -- Show simulator config if available
+    if sandbox.sim.cfg then
+      local _, lines = draw_tree_node(p, "sim.cfg", "cfg", sandbox.sim.cfg, 0, y, contentX, contentW)
+      y = y + lines * lineH
+    end
+
+    -- Show simulator hooks info
+    if sandbox.sim.hooks then
+      local hooks = {}
+      for hookName, fn in pairs(sandbox.sim.hooks) do
+        if type(fn) == "function" then
+          table.insert(hooks, hookName)
+        end
+      end
+      if #hooks > 0 then
+        table.sort(hooks)
+        love.graphics.setColor(ui.color.textDim)
+        love.graphics.print("hooks: " .. table.concat(hooks, ", "), contentX + 8, y)
+        y = y + lineH
+      end
+    end
+  end
+
+  -- Store total content height for scroll bounds
+  ui._inspectorContentHeight = y - (p.y + NAV_H + 8 - (state.inspector.scrollOffset * lineH))
+end
+
 function ui.layout(w, h)
   ui.panels.toolbar = { x = 12, y = 12, w = w - 24, h = 28 }
 
@@ -907,6 +1173,8 @@ function ui.draw_inputs()
 
   if ui.mergedOutputs and ui.leftTab == "outputs" then
     draw_outputs_content(p)
+  elseif ui.mergedOutputs and ui.leftTab == "inspector" then
+    draw_inspector_content(p)
   else
     draw_inputs_content(p)
   end
@@ -927,7 +1195,11 @@ function ui.draw_outputs()
   draw_panel(p)
   draw_nav_bar(p, "Outputs", "outputs")
   panel_content_scissor(p)
-  draw_outputs_content(p)
+  if ui.rightTab == "inspector" then
+    draw_inspector_content(p)
+  else
+    draw_outputs_content(p)
+  end
   love.graphics.setScissor()
 end
 
@@ -1346,6 +1618,9 @@ function ui.mousepressed(mx, my, button)
         elseif r.action == "left_tab" and r.tab then
           ui.leftTab = r.tab
           return
+        elseif r.action == "right_tab" and r.tab then
+          ui.rightTab = r.tab
+          return
         elseif r.action == "io_tab" and r.which and r.tab then
           if r.which == "input" then
             state.ioTabs.activeInputTab = r.tab
@@ -1373,6 +1648,17 @@ function ui.mousepressed(mx, my, button)
           return
         elseif r.action == "toggle_system_logs" then
           state.logUI.collapsedSources.system = not (state.logUI.collapsedSources.system or false)
+          return
+        end
+      end
+    end
+  end
+  -- Inspector tree node expand/collapse
+  if ui._inspectorRects then
+    for path, r in pairs(ui._inspectorRects) do
+      if r and (mx >= r.x and my >= r.y and mx <= r.x + r.w and my <= r.y + r.h) then
+        if r.action == "toggle_expand" and r.path then
+          state.inspector.expanded[r.path] = not state.inspector.expanded[r.path]
           return
         end
       end
@@ -1503,6 +1789,30 @@ function ui.wheelmoved(dx, dy)
       state.logUI.scrollOffset = math.min(maxScroll, state.logUI.scrollOffset)
     end
     return
+  end
+
+  -- Check if scrolling over inspector panel (merged mode: left panel with inspector tab, non-merged: right panel with inspector tab)
+  local inspectorPanel = nil
+  if ui.mergedOutputs and ui.leftTab == "inspector" then
+    inspectorPanel = ui.panels.io_inputs
+  elseif not ui.mergedOutputs and ui.rightTab == "inspector" then
+    inspectorPanel = ui.panels.io_outputs
+  end
+  if inspectorPanel and not ui.minimized.inputs and not ui.minimized.outputs then
+    local ip = inspectorPanel
+    if mx >= ip.x and my >= ip.y and mx < ip.x + ip.w and my < ip.y + ip.h then
+      -- Scroll inspector content
+      state.inspector.scrollOffset = state.inspector.scrollOffset - dy
+      -- Clamp to valid range
+      local font = love.graphics.getFont()
+      local fontH = font and font:getHeight() or 14
+      local lineH = fontH + 4
+      local visibleH = ip.h - NAV_H
+      local visibleLines = math.floor(visibleH / lineH)
+      local maxLines = math.max(0, math.floor((ui._inspectorContentHeight or 0) / lineH) - visibleLines + 2)
+      state.inspector.scrollOffset = math.max(0, math.min(maxLines, state.inspector.scrollOffset))
+      return
+    end
   end
 
   -- Number slider scrolling

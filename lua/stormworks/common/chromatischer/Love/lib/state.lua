@@ -104,6 +104,12 @@ local state = {
     inputB = {},  -- [1..32] = true if simulator controls
     inputN = {},  -- [1..32] = true if simulator controls
   },
+
+  -- Inspector panel state
+  inspector = {
+    expanded = {},      -- { ["path.to.key"] = true/false }
+    scrollOffset = 0,   -- vertical scroll position (lines from top)
+  },
 }
 
 for i=1,32 do
