@@ -445,12 +445,59 @@ local function load_error_messages()
   local content = file:read("*all")
   file:close()
   
-  -- Simple JSON parser for our specific structure
+  -- JSON parser that handles escaped quotes properly
   local messages = {}
-  for msg in content:gmatch('"([^"]+)"') do
-    -- Skip the "messages" key itself
-    if msg ~= "messages" then
-      table.insert(messages, msg)
+  -- Pattern matches strings with proper escape handling
+  -- Matches: " followed by (non-quote OR backslash+any char)* followed by "
+  local i = 1
+  while i <= #content do
+    local start_pos = content:find('"', i)
+    if not start_pos then break end
+    
+    -- Find the closing quote, accounting for escaped quotes
+    local pos = start_pos + 1
+    local str = ""
+    local escaped = false
+    
+    while pos <= #content do
+      local char = content:sub(pos, pos)
+      
+      if escaped then
+        -- Handle escaped characters
+        if char == '"' then
+          str = str .. '"'
+        elseif char == '\\' then
+          str = str .. '\\'
+        elseif char == 'n' then
+          str = str .. '\n'
+        elseif char == 't' then
+          str = str .. '\t'
+        elseif char == 'r' then
+          str = str .. '\r'
+        else
+          -- Keep the backslash for unknown escapes
+          str = str .. '\\' .. char
+        end
+        escaped = false
+      elseif char == '\\' then
+        escaped = true
+      elseif char == '"' then
+        -- Found the closing quote
+        if str ~= "messages" then
+          table.insert(messages, str)
+        end
+        i = pos + 1
+        break
+      else
+        str = str .. char
+      end
+      
+      pos = pos + 1
+    end
+    
+    if pos > #content then
+      -- Reached end without finding closing quote
+      break
     end
   end
   
