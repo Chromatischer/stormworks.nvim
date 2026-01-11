@@ -57,8 +57,11 @@ describe("Build Pipeline Integration", function()
       final_stripped = final_stripped:gsub("^%s*", "")
       
       -- The minimized code (comments stripped) should be smaller than original
-      -- Note: This may fail for very small scripts where minimization overhead exceeds savings
-      if #script > 200 then
+      -- Skip size comparison for very small scripts (< 200 chars) where the
+      -- minimization overhead (e.g., boilerplate, variable aliases) may exceed savings.
+      -- This threshold accounts for the LifeBoatAPI minimizer's fixed-cost operations.
+      local MIN_SCRIPT_SIZE_FOR_SIZE_TEST = 200
+      if #script > MIN_SCRIPT_SIZE_FOR_SIZE_TEST then
         assert.is_true(#final_stripped < #script, 
           string.format("Minimized code (%d) should be smaller than input (%d)", 
             #final_stripped, #script))

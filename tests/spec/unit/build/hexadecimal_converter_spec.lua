@@ -8,7 +8,9 @@ describe("HexadecimalConverter", function()
     converter_class = LifeBoatAPI.Tools.HexadecimalConverter
   end)
 
-  describe("fixHexademicals", function()  -- Note: method name has typo in original implementation
+  -- Note: The method is named 'fixHexademicals' (not 'fixHexadecimals') in the original 
+  -- LifeBoatAPI implementation from nameouschangey. We match the actual API.
+  describe("fixHexademicals", function()
     it("should convert uppercase hex to decimal", function()
       local converter = converter_class:new()
       local input = "local x = 0xFF"
