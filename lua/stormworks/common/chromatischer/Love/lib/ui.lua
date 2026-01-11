@@ -1042,6 +1042,21 @@ function ui.layout(w, h)
     local outputsX = w - 12 - rightW
     ui.panels.io_outputs = { x = outputsX, y = midTop, w = rightW, h = midH }
   end
+
+  -- Debug logging
+  if state.debugOverlayEnabled then
+    print(string.format(
+      "[UI Layout] Window: %dx%d | Game: %dx%d @ %.1fx | Debug: %s | Minimized: I=%s G=%s O=%s D=%s L=%s",
+      w, h,
+      state.gameCanvasW or 0, state.gameCanvasH or 0, state.gameCanvasScale or 1,
+      state.debugCanvasEnabled and "ON" or "OFF",
+      ui.minimized.inputs and "Y" or "N",
+      ui.minimized.game and "Y" or "N",
+      ui.minimized.outputs and "Y" or "N",
+      ui.minimized.debug and "Y" or "N",
+      ui.minimized.log and "Y" or "N"
+    ))
+  end
 end
 
 function ui.draw_toolbar()
@@ -1980,6 +1995,92 @@ function ui.draw_export_toast()
   love.graphics.rectangle("fill", x, y, tw + 32, 32, 6, 6)
   love.graphics.setColor(1, 1, 1, alpha)
   love.graphics.print(text, x + 16, y + 8)
+end
+
+---@brief Draw debug overlay showing panel boundaries and hit areas
+function ui.draw_debug_overlay()
+  if not state.debugOverlayEnabled then return end
+
+  love.graphics.setLineWidth(1)
+
+  -- 1. Draw panel boundaries
+  for name, panel in pairs(ui.panels) do
+    if panel.w > 0 and panel.h > 0 then
+      love.graphics.setColor(1, 0, 0, 0.4)  -- Red with transparency
+      love.graphics.rectangle("line", panel.x, panel.y, panel.w, panel.h)
+
+      love.graphics.setColor(1, 1, 1, 0.9)
+      love.graphics.print(
+        string.format("%s: %d,%d %dx%d", name, panel.x, panel.y, panel.w, panel.h),
+        panel.x + 4, panel.y + 4
+      )
+    end
+  end
+
+  -- 2. Draw canvas hit rectangles
+  for which, rect in pairs(ui._canvasRects) do
+    if rect then
+      love.graphics.setColor(0, 1, 0, 0.4)  -- Green
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+      love.graphics.setColor(1, 1, 1, 0.9)
+      love.graphics.print(
+        string.format("%s canvas: scale=%.1fx", which, rect.scale),
+        rect.x + 4, rect.y + rect.h - 20
+      )
+    end
+  end
+
+  -- 3. Draw boolean input hit areas
+  for i, rect in pairs(ui._boolRects) do
+    if rect then
+      love.graphics.setColor(0, 0.5, 1, 0.3)  -- Blue
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+    end
+  end
+
+  -- 4. Draw number input hit areas (sliders)
+  for i, rect in pairs(ui._numRects) do
+    if rect then
+      love.graphics.setColor(1, 1, 0, 0.3)  -- Yellow
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+    end
+  end
+
+  -- 5. Draw navigation bar hit areas
+  for key, rect in pairs(ui._navRects) do
+    if rect then
+      love.graphics.setColor(1, 0, 1, 0.3)  -- Magenta
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+    end
+  end
+
+  -- 6. Draw toolbar button hit areas
+  for key, rect in pairs(ui._toolbarRects) do
+    if rect then
+      love.graphics.setColor(0, 1, 1, 0.3)  -- Cyan
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+    end
+  end
+
+  -- 7. Draw legend in top-right corner
+  local legendX = love.graphics.getWidth() - 220
+  local legendY = 40
+  love.graphics.setColor(0, 0, 0, 0.7)
+  love.graphics.rectangle("fill", legendX - 4, legendY - 4, 216, 120)
+
+  local function legendItem(text, color, y)
+    love.graphics.setColor(color[1], color[2], color[3], 0.8)
+    love.graphics.rectangle("fill", legendX, y, 16, 16)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(text, legendX + 20, y + 2)
+  end
+
+  legendItem("Panels", {1, 0, 0}, legendY)
+  legendItem("Canvas rects", {0, 1, 0}, legendY + 18)
+  legendItem("Bool inputs", {0, 0.5, 1}, legendY + 36)
+  legendItem("Number inputs", {1, 1, 0}, legendY + 54)
+  legendItem("Nav bars", {1, 0, 1}, legendY + 72)
+  legendItem("Toolbar", {0, 1, 1}, legendY + 90)
 end
 
 return ui

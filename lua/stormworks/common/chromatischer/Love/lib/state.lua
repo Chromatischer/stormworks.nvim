@@ -21,6 +21,9 @@ local state = {
   debugCanvasH = 512,
   debugCanvasScale = 1,
 
+  -- UI layer debugging (for development)
+  debugOverlayEnabled = false,
+
   -- Pointer/touch state for canvases (updated by UI events)
   touch = {
     game = { x = 0, y = 0, left = false, right = false, inside = false },
@@ -70,6 +73,7 @@ local state = {
     tick = false,
     scale = false,
     debugCanvas = false,
+    debugOverlay = false,
   },
 
   -- Export feature state

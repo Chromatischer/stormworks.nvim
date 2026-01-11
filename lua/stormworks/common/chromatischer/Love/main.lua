@@ -88,11 +88,20 @@ local function parse_args(args)
         state.cliOverrides.scale = true
       end
       i = i + 2
-    elseif a == "--debug-canvas" and args[i + 1] then
+    -- Enable user debug canvas (512x512 for onDebugDraw callbacks)
+    elseif a == "--user-debug" and args[i + 1] then
       local v = tostring(args[i + 1])
       state.debugCanvasEnabled = (v == "true" or v == "1" or v == "on")
       if state.cliOverrides then
         state.cliOverrides.debugCanvas = true
+      end
+      i = i + 2
+    -- Enable UI layer debug overlay (panel boundaries, hit areas)
+    elseif a == "--debug-canvas" and args[i + 1] then
+      local v = tostring(args[i + 1])
+      state.debugOverlayEnabled = (v == "true" or v == "1" or v == "on")
+      if state.cliOverrides then
+        state.cliOverrides.debugOverlay = true
       end
       i = i + 2
     elseif a == "--max-error-repeats" and args[i + 1] then
@@ -492,6 +501,11 @@ function love.draw()
   -- Draw export modal and toast (on top of everything)
   ui.draw_export_modal()
   ui.draw_export_toast()
+
+  -- UI debug overlay (for development)
+  if state.debugOverlayEnabled then
+    ui.draw_debug_overlay()
+  end
 
   -- Update detached frame writers after rendering
   detach.update()
