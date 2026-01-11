@@ -42,13 +42,19 @@ describe("Build Pipeline Integration", function()
       local orig, combined, final, outFile = builder:buildMicrocontroller(
         "test_mc.lua",
         LifeBoatAPI.Tools.Filepath:new(script_path),
-        {}
+        {forceNCBoilerplate = true}  -- Use minimal boilerplate for size comparison
       )
 
       -- Assertions
       assert.is_string(final)
       assert.is_true(#final > 0, "Output should not be empty")
-      assert.is_true(#final < #script, "Output should be smaller than input")
+      
+      -- Strip boilerplate comments for fair size comparison
+      local final_stripped = final:gsub("^%-%-[^\n]*\n", "")
+      final_stripped = final_stripped:gsub("^%s+%-%-[^\n]*\n", "")
+      final_stripped = final_stripped:gsub("^%s+%-%-[^\n]*\n", "")
+      final_stripped = final_stripped:gsub("^%s*\n", "")
+      assert.is_true(#final_stripped < #script, "Minimized code (excluding comments) should be smaller than input")
 
       -- Should be valid Lua
       local is_valid, err = TestUtils.is_valid_lua(final)

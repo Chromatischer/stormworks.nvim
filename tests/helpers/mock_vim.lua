@@ -34,8 +34,43 @@ MockVim.fn = {
   end,
 
   isdirectory = function(path)
+    -- First check mock state
     local info = MockVim._state.files[path]
-    return (info and info.type == "directory") and 1 or 0
+    if info then
+      return (info.type == "directory") and 1 or 0
+    end
+    -- Fall back to actual filesystem check for test temp directories
+    -- Use io.popen to check if it's a directory since os.execute return values vary
+    local handle = io.popen('test -d "' .. path .. '" && echo "yes" || echo "no"')
+    if handle then
+      local result = handle:read("*l")
+      handle:close()
+      return (result == "yes") and 1 or 0
+    end
+    return 0
+  end,
+
+  glob = function(pattern, nosuf, list)
+    -- Proper glob implementation
+    local result = {}
+    
+    -- Handle pattern like "/path/*"
+    local dir = pattern:gsub("/%*$", "")
+    
+    -- Use find to get files
+    local handle = io.popen('find "' .. dir .. '" -maxdepth 1 -type f 2>/dev/null')
+    if handle then
+      for line in handle:lines() do
+        table.insert(result, line)
+      end
+      handle:close()
+    end
+    
+    if list then
+      return result
+    else
+      return table.concat(result, "\n")
+    end
   end,
 
   executable = function(cmd)
@@ -132,7 +167,23 @@ MockVim.api = {
 
 MockVim.uv = {
   fs_stat = function(path)
-    return MockVim._state.files[path]
+    -- First check mock state
+    local info = MockVim._state.files[path]
+    if info then
+      return info
+    end
+    -- Fall back to actual filesystem for temp files
+    local f = io.open(path, "r")
+    if f then
+      f:close()
+      return { type = "file" }
+    end
+    -- Check if it's a directory
+    local ok = os.execute("test -d " .. path .. " 2>/dev/null")
+    if ok then
+      return { type = "directory" }
+    end
+    return nil
   end,
 
   cwd = function() return MockVim._state.cwd end,

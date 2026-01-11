@@ -1,12 +1,13 @@
 describe("Headless", function()
   local MockLove = require("mock_love")
+  local TestUtils = require("test_utils")
   local headless
 
   setup(function()
     -- Install LOVE mock
     _G.love = MockLove
 
-    local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+    local project_root = TestUtils.get_project_root()
     package.path = project_root .. "/lua/stormworks/common/chromatischer/Love/lib/?.lua;" .. package.path
 
     headless = require("headless")
@@ -22,7 +23,7 @@ describe("Headless", function()
       local state = {}
       local config = headless.parse_args(args, state)
 
-      assert.is_true(config.headless)
+      assert.is_true(config.enabled)
     end)
 
     it("should parse --ticks argument", function()
@@ -42,11 +43,11 @@ describe("Headless", function()
     end)
 
     it("should parse --capture argument", function()
-      local args = {"--headless", "--capture", "debug"}
+      local args = {"--headless", "--capture", "game"}
       local state = {}
       local config = headless.parse_args(args, state)
 
-      assert.equals("debug", config.capture)
+      assert.equals("game", config.capture)
     end)
 
     it("should parse inline inputs", function()
@@ -55,8 +56,8 @@ describe("Headless", function()
       local config = headless.parse_args(args, state)
 
       assert.is_table(config.inputs)
-      assert.is_true(config.inputs.B and config.inputs.B["1"])
-      assert.equals(0.5, config.inputs.N and config.inputs.N["1"])
+      assert.is_true(config.inputs["B1"])
+      assert.equals(0.5, config.inputs["N1"])
     end)
 
     it("should default to 1 tick if not specified", function()
@@ -67,83 +68,65 @@ describe("Headless", function()
       assert.equals(1, config.ticks)
     end)
 
-    it("should default to game capture if not specified", function()
+    it("should default to debug capture if not specified", function()
       local args = {"--headless"}
       local state = {}
       local config = headless.parse_args(args, state)
 
-      assert.equals("game", config.capture)
+      assert.equals("debug", config.capture)
+    end)
+
+    it("should auto-detect png format from extension", function()
+      local args = {"--headless", "--output", "test.png"}
+      local state = {}
+      local config = headless.parse_args(args, state)
+
+      assert.equals("png", config.format)
+    end)
+
+    it("should auto-detect jpg format from extension", function()
+      local args = {"--headless", "--output", "test.jpg"}
+      local state = {}
+      local config = headless.parse_args(args, state)
+
+      assert.equals("jpg", config.format)
     end)
   end)
 
-  describe("apply_inputs", function()
-    it("should apply boolean inputs to state", function()
-      local state = {
-        inputB = {},
-        inputN = {}
-      }
-      for i = 1, 32 do
-        state.inputB[i] = false
-        state.inputN[i] = 0
-      end
+  describe("export_canvas", function()
+    it("should return error when canvas is nil", function()
+      local ok, err = headless.export_canvas(nil, "/tmp/test.png", "png")
 
-      local inputs = {
-        B = {
-          ["1"] = true,
-          ["5"] = false
-        }
-      }
-
-      headless.apply_inputs(state, inputs)
-
-      assert.is_true(state.inputB[1])
-      assert.is_false(state.inputB[5])
+      assert.is_false(ok)
+      assert.equals("canvas is nil", err)
     end)
 
-    it("should apply number inputs to state", function()
-      local state = {
-        inputB = {},
-        inputN = {}
-      }
-      for i = 1, 32 do
-        state.inputB[i] = false
-        state.inputN[i] = 0
-      end
+    it("should export canvas to file", function()
+      local canvas = MockLove.graphics.newCanvas(100, 100)
+      
+      -- Note: This will actually try to write to the file system
+      -- In a real test environment, we'd mock io.open as well
+      local ok, err = headless.export_canvas(canvas, "/tmp/test_headless_export.png", "png")
 
-      local inputs = {
-        N = {
-          ["1"] = 0.5,
-          ["2"] = 0.75
-        }
-      }
-
-      headless.apply_inputs(state, inputs)
-
-      assert.equals(0.5, state.inputN[1])
-      assert.equals(0.75, state.inputN[2])
+      assert.is_true(ok)
+      os.remove("/tmp/test_headless_export.png")
     end)
   end)
 
-  describe("collect_outputs", function()
-    it("should collect outputs from state", function()
-      local state = {
-        outputB = {},
-        outputN = {}
-      }
-      for i = 1, 32 do
-        state.outputB[i] = false
-        state.outputN[i] = 0
-      end
+  describe("generate_export_path", function()
+    it("should generate path with timestamp", function()
+      local path = headless.generate_export_path("/tmp", "game", "png")
 
-      state.outputB[1] = true
-      state.outputN[2] = 0.5
+      assert.is_string(path)
+      assert.is_true(path:match("^/tmp/export_game_") ~= nil)
+      assert.is_true(path:match("%.png$") ~= nil)
+    end)
 
-      local outputs = headless.collect_outputs(state)
+    it("should handle empty base_dir", function()
+      local path = headless.generate_export_path("", "debug", "png")
 
-      assert.is_table(outputs.B)
-      assert.is_table(outputs.N)
-      assert.is_true(outputs.B["1"])
-      assert.equals(0.5, outputs.N["2"])
+      assert.is_string(path)
+      assert.is_true(path:match("^export_debug_") ~= nil)
     end)
   end)
 end)

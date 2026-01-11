@@ -8,7 +8,7 @@ describe("RedundancyRemover", function()
     remover_class = LifeBoatAPI.Tools.RedundancyRemover
   end)
 
-  describe("removeRedundancies", function()
+  describe("removeRedundantCode", function()
     it("should remove unused section", function()
       local remover = remover_class:new()
       local input = [[
@@ -24,7 +24,7 @@ function onTick()
 end
 ]]
 
-      local output = remover:removeRedundancies(input)
+      local output = remover:removeRedundantCode(input)
 
       TestUtils.assert_not_contains(output, "MyFunc")
       TestUtils.assert_contains(output, "onTick")
@@ -45,7 +45,7 @@ function onTick()
 end
 ]]
 
-      local output = remover:removeRedundancies(input)
+      local output = remover:removeRedundantCode(input)
 
       TestUtils.assert_contains(output, "UsedFunc")
       TestUtils.assert_contains(output, "onTick")
@@ -67,7 +67,7 @@ function onTick()
 end
 ]]
 
-      local output = remover:removeRedundancies(input)
+      local output = remover:removeRedundantCode(input)
 
       TestUtils.assert_not_contains(output, "UnusedFunc")
       TestUtils.assert_contains(output, "UsedFunc")
@@ -85,7 +85,7 @@ function onTick()
 end
 ]]
 
-      local output = remover:removeRedundancies(input)
+      local output = remover:removeRedundantCode(input)
 
       -- Should remove because Helper is used only 1 time, but needs 2
       TestUtils.assert_not_contains(output, "Helper")

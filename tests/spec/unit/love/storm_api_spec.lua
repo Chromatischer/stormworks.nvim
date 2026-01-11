@@ -1,16 +1,49 @@
 describe("StormAPI", function()
   local MockLove = require("mock_love")
+  local TestUtils = require("test_utils")
   local state
+  local storm_api
 
   setup(function()
     -- Install LOVE mock
     _G.love = MockLove
 
-    local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+    local project_root = TestUtils.get_project_root()
     package.path = project_root .. "/lua/stormworks/common/chromatischer/Love/lib/?.lua;" .. package.path
 
-    -- Load state first
+    -- Load state first (used by many tests directly)
     state = require("state")
+    
+    -- Pre-load modules that storm_api will require with the correct names
+    -- This allows storm_api to work outside of LÖVE context
+    package.loaded['lib.state'] = state
+    package.loaded['lib.logger'] = require("logger")
+    
+    -- Mock canvases module since it requires love.graphics
+    package.loaded['lib.canvases'] = {
+      withTarget = function(which, fn)
+        -- Create a mock API
+        local mock_api = {
+          clear = function() end,
+          setColor = function(r, g, b, a) MockLove.graphics.setColor(r/255, g/255, b/255, (a or 255)/255) end,
+          drawRect = function() end,
+          drawCircle = function() end,
+          drawLine = function() end,
+          drawText = function() end,
+        }
+        fn(mock_api)
+      end,
+      game = MockLove.graphics.newCanvas(96, 64),
+      debug = MockLove.graphics.newCanvas(512, 512),
+    }
+    
+    -- Mock font4x6
+    package.loaded['lib.font4x6'] = {
+      measureString = function(s) return #s * 4, 6 end
+    }
+    
+    -- Now load storm_api
+    storm_api = require("storm_api")
   end)
 
   before_each(function()
@@ -26,107 +59,82 @@ describe("StormAPI", function()
   end)
 
   describe("input", function()
-    it("should create input API", function()
-      local storm_api = require("storm_api")
-      local input_api = storm_api.createInputAPI(state)
-
-      assert.is_function(input_api.getBool)
-      assert.is_function(input_api.getNumber)
+    it("should have input API", function()
+      assert.is_table(storm_api.input)
+      assert.is_function(storm_api.input.getBool)
+      assert.is_function(storm_api.input.getNumber)
     end)
 
     it("should get boolean input", function()
-      local storm_api = require("storm_api")
-      local input_api = storm_api.createInputAPI(state)
-
       state.inputB[1] = true
       state.inputB[2] = false
 
-      assert.is_true(input_api.getBool(1))
-      assert.is_false(input_api.getBool(2))
+      assert.is_true(storm_api.input.getBool(1))
+      assert.is_false(storm_api.input.getBool(2))
     end)
 
     it("should get number input", function()
-      local storm_api = require("storm_api")
-      local input_api = storm_api.createInputAPI(state)
-
       state.inputN[1] = 0.5
       state.inputN[2] = 0.75
 
-      assert.equals(0.5, input_api.getNumber(1))
-      assert.equals(0.75, input_api.getNumber(2))
+      assert.equals(0.5, storm_api.input.getNumber(1))
+      assert.equals(0.75, storm_api.input.getNumber(2))
     end)
 
-    it("should clamp channel to valid range", function()
-      local storm_api = require("storm_api")
-      local input_api = storm_api.createInputAPI(state)
-
+    it("should return false for invalid channel", function()
       state.inputB[1] = true
 
-      -- Out of range should clamp to valid range
-      local result = input_api.getBool(0)  -- Should clamp to 1
-      assert.is_boolean(result)
+      -- Out of range should return default
+      local result = storm_api.input.getBool(0)
+      assert.is_false(result)
 
-      result = input_api.getBool(33)  -- Should clamp to 32
-      assert.is_boolean(result)
+      result = storm_api.input.getBool(33)
+      assert.is_false(result)
     end)
   end)
 
   describe("output", function()
-    it("should create output API", function()
-      local storm_api = require("storm_api")
-      local output_api = storm_api.createOutputAPI(state)
-
-      assert.is_function(output_api.setBool)
-      assert.is_function(output_api.setNumber)
+    it("should have output API", function()
+      assert.is_table(storm_api.output)
+      assert.is_function(storm_api.output.setBool)
+      assert.is_function(storm_api.output.setNumber)
     end)
 
     it("should set boolean output", function()
-      local storm_api = require("storm_api")
-      local output_api = storm_api.createOutputAPI(state)
-
-      output_api.setBool(1, true)
-      output_api.setBool(2, false)
+      storm_api.output.setBool(1, true)
+      storm_api.output.setBool(2, false)
 
       assert.is_true(state.outputB[1])
       assert.is_false(state.outputB[2])
     end)
 
     it("should set number output", function()
-      local storm_api = require("storm_api")
-      local output_api = storm_api.createOutputAPI(state)
-
-      output_api.setNumber(1, 0.5)
-      output_api.setNumber(2, 0.75)
+      storm_api.output.setNumber(1, 0.5)
+      storm_api.output.setNumber(2, 0.75)
 
       assert.equals(0.5, state.outputN[1])
       assert.equals(0.75, state.outputN[2])
     end)
   end)
 
-  describe("screen", function()
-    it("should create screen API", function()
-      local storm_api = require("storm_api")
-      local screen_api = storm_api.createScreenAPI(state, "game")
-
-      assert.is_function(screen_api.setColor)
-      assert.is_function(screen_api.drawRect)
-      assert.is_function(screen_api.drawCircle)
-      assert.is_function(screen_api.drawLine)
-      assert.is_function(screen_api.drawText)
+  describe("property", function()
+    it("should have property API", function()
+      assert.is_table(storm_api.property)
+      assert.is_function(storm_api.property.getNumber)
+      assert.is_function(storm_api.property.getText)
+      assert.is_function(storm_api.property.getBool)
     end)
 
-    it("should convert color from 0-255 to 0-1", function()
-      local storm_api = require("storm_api")
-      local screen_api = storm_api.createScreenAPI(state, "game")
+    it("should get property number", function()
+      state.properties.testNum = 42
 
-      screen_api.setColor(255, 128, 0, 255)
+      assert.equals(42, storm_api.property.getNumber("testNum"))
+    end)
 
-      -- Check that love.graphics.setColor was called
-      local r, g, b, a = MockLove.graphics.getColor()
-      assert.equals(1, r)
-      assert.is_true(g > 0.49 and g < 0.51)  -- ~0.5
-      assert.equals(0, b)
-      assert.equals(1, a)
+    it("should get property text", function()
+      state.properties.testText = "hello"
+
+      assert.equals("hello", storm_api.property.getText("testText"))
     end)
   end)
 end)

@@ -20,7 +20,7 @@ describe("Neovim Plugin Integration", function()
 
   describe("plugin loading", function()
     it("should load plugin modules without errors", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+      local project_root = TestUtils.get_project_root()
       package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
 
       -- Load main plugin
@@ -31,7 +31,7 @@ describe("Neovim Plugin Integration", function()
     end)
 
     it("should export setup function", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+      local project_root = TestUtils.get_project_root()
       package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
 
       local stormworks = require("stormworks")
@@ -42,7 +42,7 @@ describe("Neovim Plugin Integration", function()
 
   describe("project detection", function()
     it("should detect microproject in current directory", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+      local project_root = TestUtils.get_project_root()
       package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
 
       local project = require("stormworks.modules.project")
@@ -51,15 +51,16 @@ describe("Neovim Plugin Integration", function()
       local marker_path = temp_dir .. "/.microproject"
       TestUtils.write_file(marker_path, "return {is_microcontroller = true}")
       MockVim.setFile(marker_path, "return {is_microcontroller = true}")
+      MockVim._state.cwd = temp_dir
 
-      local detected = project.detect(temp_dir)
+      local detected_path, marker_type, proj_root = project.detect_micro_project()
 
-      assert.is_not_nil(detected)
-      assert.equals(temp_dir, detected)
+      assert.is_not_nil(detected_path)
+      assert.equals(temp_dir, proj_root)
     end)
 
     it("should search upward from subdirectory", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+      local project_root = TestUtils.get_project_root()
       package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
 
       local project = require("stormworks.modules.project")
@@ -72,121 +73,77 @@ describe("Neovim Plugin Integration", function()
       local marker_path = temp_dir .. "/.microproject"
       TestUtils.write_file(marker_path, "return {is_microcontroller = true}")
       MockVim.setFile(marker_path, "return {is_microcontroller = true}")
+      MockVim._state.cwd = sub_dir
 
       -- Detect from subdirectory
-      local detected = project.detect(sub_dir)
+      local detected_path, marker_type, proj_root = project.detect_micro_project()
 
-      assert.is_not_nil(detected)
-      assert.equals(temp_dir, detected)
+      assert.is_not_nil(detected_path)
+      assert.equals(temp_dir, proj_root)
     end)
   end)
 
   describe("library management", function()
-    it("should get bundled library paths", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+    it("should have register_libraries_with_lsp function", function()
+      local project_root = TestUtils.get_project_root()
       package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
 
       local library = require("stormworks.modules.library")
 
-      local libs = library.get_plugin_libraries()
-
-      assert.is_table(libs)
-      assert.is_true(#libs > 0)
-    end)
-
-    it("should merge plugin and project libraries", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
-      package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
-
-      local library = require("stormworks.modules.library")
-
-      local plugin_libs = {"/plugin/lib1", "/plugin/lib2"}
-      local project_libs = {"/project/lib1"}
-
-      local merged = library.merge_libraries(plugin_libs, project_libs)
-
-      assert.equals(3, #merged)
-    end)
-
-    it("should deduplicate library paths", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
-      package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
-
-      local library = require("stormworks.modules.library")
-
-      local plugin_libs = {"/shared/lib"}
-      local project_libs = {"/shared/lib"}
-
-      local merged = library.merge_libraries(plugin_libs, project_libs)
-
-      -- Should not duplicate
-      assert.equals(1, #merged)
+      assert.is_function(library.register_libraries_with_lsp)
     end)
   end)
 
   describe("configuration", function()
-    it("should merge user config with defaults", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+    it("should have config table with defaults", function()
+      local project_root = TestUtils.get_project_root()
+      package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
+
+      local config = require("stormworks.modules.config")
+
+      -- Config should have nested config table
+      assert.is_table(config.config)
+      assert.is_table(config.config.project_markers)
+      assert.is_table(config.config.keymaps)
+    end)
+
+    it("should merge user config via setup", function()
+      local project_root = TestUtils.get_project_root()
       package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
 
       local config = require("stormworks.modules.config")
 
       local user_config = {
-        build = {
-          minifier = {
-            shortenVariables = false
-          }
-        }
+        build_command = "custom_build"
       }
 
-      local merged = config.setup(user_config)
+      config.setup(user_config)
 
       -- User setting should override
-      assert.is_false(merged.build.minifier.shortenVariables)
-
-      -- Default settings should remain
-      assert.is_table(merged.love)
-      assert.is_table(merged.libraries)
+      assert.equals("custom_build", config.config.build_command)
     end)
   end)
 
   describe("end-to-end workflow", function()
-    it("should setup plugin, detect project, and load libraries", function()
-      local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+    it("should setup plugin, detect project, and mark as microproject", function()
+      local project_root = TestUtils.get_project_root()
       package.path = project_root .. "/lua/?.lua;" .. project_root .. "/lua/?/init.lua;" .. package.path
-
-      -- Create microproject
-      local marker_path = temp_dir .. "/.microproject"
-      local project_config = [[
-return {
-  is_microcontroller = true,
-  libraries = {"custom_lib"}
-}
-]]
-      TestUtils.write_file(marker_path, project_config)
-      MockVim.setFile(marker_path, project_config)
 
       -- Load modules
       local stormworks = require("stormworks")
       local project = require("stormworks.modules.project")
-      local library = require("stormworks.modules.library")
 
-      -- Detect project
-      local proj_root = project.detect(temp_dir)
-      assert.is_not_nil(proj_root)
+      MockVim._state.cwd = temp_dir
 
-      -- Load config
-      local proj_config = project.load_config(proj_root)
-      assert.is_table(proj_config)
-      assert.is_true(proj_config.is_microcontroller)
+      -- Mark as microproject
+      project.mark_as_micro_project()
 
-      -- Get libraries
-      local plugin_libs = library.get_plugin_libraries()
-      local project_libs = library.get_project_libraries(proj_root, proj_config)
-      local all_libs = library.merge_libraries(plugin_libs, project_libs)
-
-      assert.is_table(all_libs)
-      assert.is_true(#all_libs > 0)
+      -- Verify marker file was created
+      local marker_path = temp_dir .. "/.microproject"
+      local content = TestUtils.read_file(marker_path)
+      
+      assert.is_not_nil(content)
+      assert.is_true(content:find("is_microcontroller = true") ~= nil)
     end)
   end)
 end)

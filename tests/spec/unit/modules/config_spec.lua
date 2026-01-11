@@ -17,64 +17,59 @@ describe("Config", function()
   end)
 
   describe("default configuration", function()
-    it("should have default build options", function()
-      assert.is_table(config.build)
-      assert.is_table(config.build.minifier)
+    it("should have config table", function()
+      assert.is_table(config.config)
     end)
 
-    it("should have default LÖVE options", function()
-      assert.is_table(config.love)
+    it("should have default project markers", function()
+      assert.is_table(config.config.project_markers)
+      assert.equals(1, #config.config.project_markers)
+      assert.equals(".microproject", config.config.project_markers[1])
     end)
 
-    it("should have default library paths", function()
-      assert.is_table(config.libraries)
+    it("should have default user_lib_paths", function()
+      assert.is_table(config.config.user_lib_paths)
     end)
 
     it("should have default keymaps", function()
-      assert.is_table(config.keys)
+      assert.is_table(config.config.keymaps)
     end)
   end)
 
   describe("setup", function()
     it("should merge user configuration", function()
       local user_config = {
-        build = {
-          minifier = {
-            shortenVariables = false
-          }
-        }
+        build_command = "custom_build"
       }
 
-      local merged = config.setup(user_config)
+      config.setup(user_config)
 
-      assert.is_false(merged.build.minifier.shortenVariables)
+      assert.equals("custom_build", config.config.build_command)
       -- Other defaults should still exist
-      assert.is_table(merged.love)
+      assert.is_table(config.config.project_markers)
     end)
 
     it("should deep merge nested tables", function()
       local user_config = {
-        build = {
-          minifier = {
-            shortenVariables = false
-          }
+        keymaps = {
+          build = "B"
         }
       }
 
-      local merged = config.setup(user_config)
+      config.setup(user_config)
 
       -- User option
-      assert.is_false(merged.build.minifier.shortenVariables)
-      -- Other minifier options should still exist from defaults
-      assert.is_not_nil(merged.build.minifier.removeComments)
+      assert.equals("B", config.config.keymaps.build)
+      -- Other keymap options should still exist from defaults
+      assert.is_not_nil(config.config.keymaps.mark)
     end)
 
-    it("should return default config if no user config provided", function()
-      local merged = config.setup()
+    it("should keep default config if no user config provided", function()
+      config.setup()
 
-      assert.is_table(merged)
-      assert.is_table(merged.build)
-      assert.is_table(merged.love)
+      assert.is_table(config.config)
+      assert.is_table(config.config.project_markers)
+      assert.is_table(config.config.keymaps)
     end)
   end)
 end)

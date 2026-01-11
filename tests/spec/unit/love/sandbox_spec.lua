@@ -9,7 +9,7 @@ describe("Sandbox", function()
     -- Install LOVE mock
     _G.love = MockLove
 
-    local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+    local project_root = TestUtils.get_project_root()
     package.path = project_root .. "/lua/stormworks/common/chromatischer/Love/lib/?.lua;" .. package.path
 
     state = require("state")
