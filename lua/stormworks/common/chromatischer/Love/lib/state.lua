@@ -113,6 +113,9 @@ local state = {
   inspector = {
     expanded = {},      -- { ["path.to.key"] = true/false }
     scrollOffset = 0,   -- vertical scroll position (lines from top)
+    hideFunctions = true,   -- hide function-type globals by default
+    pinnedGlobals = {},     -- {"globalName1", ...} - pinned to top
+    groupByOrigin = true,   -- group globals by require() source
   },
 }
 

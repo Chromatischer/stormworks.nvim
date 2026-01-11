@@ -809,6 +809,8 @@ end
 
 -- Hit regions for inspector tree nodes
 ui._inspectorRects = {}
+ui._inspectorPinRects = {}
+ui._inspectorPinsChanged = false
 
 local function draw_tree_node(p, path, key, value, indent, y, contentX, contentW)
   local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
@@ -913,6 +915,42 @@ local function draw_tree_node(p, path, key, value, indent, y, contentX, contentW
   return y + lineH, drawnLines
 end
 
+-- Helper: Check if a global is pinned
+local function is_global_pinned(name)
+  for _, p in ipairs(state.inspector.pinnedGlobals or {}) do
+    if p == name then return true end
+  end
+  return false
+end
+
+-- Helper: Draw a single inspector row with pin button
+local function draw_inspector_row(p, item, y, contentX, contentW, lineH, fontH)
+  local isPinned = is_global_pinned(item.key)
+  local pinW = 14
+
+  -- Draw pin button
+  local pinX = contentX
+  if isPinned then
+    love.graphics.setColor(ui.color.accent)
+    love.graphics.print("*", pinX, y)
+  else
+    love.graphics.setColor(ui.color.textDim)
+    love.graphics.print("o", pinX, y)
+  end
+
+  -- Register pin button hit region
+  ui._inspectorPinRects[item.key] = {
+    x = pinX, y = y, w = pinW, h = lineH,
+    globalName = item.key, isPinned = isPinned
+  }
+
+  -- Draw the tree node (offset by pin button width)
+  local path = "script." .. tostring(item.key)
+  local _, lines = draw_tree_node(p, path, item.key, item.value, 0, y, contentX + pinW + 2, contentW - pinW - 2)
+
+  return lines
+end
+
 local function draw_inspector_content(p)
   local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
   local lineH = fontH + 4
@@ -920,37 +958,124 @@ local function draw_inspector_content(p)
 
   -- Clear previous hit regions
   ui._inspectorRects = {}
+  ui._inspectorPinRects = {}
 
   local contentX = p.x + 8
   local contentW = p.w - 16
   local y = p.y + NAV_H + 8 - (state.inspector.scrollOffset * lineH)
 
-  -- Section: Script Globals
+  -- Draw hide-functions toggle button in top right
+  local btnW = 24
+  local btnH = 16
+  local btnX = p.x + p.w - btnW - 8
+  local btnY = p.y + NAV_H + 4
+  local hideFn = state.inspector.hideFunctions
+  if hideFn then
+    love.graphics.setColor(ui.color.panelBg)
+  else
+    love.graphics.setColor(ui.color.accent[1], ui.color.accent[2], ui.color.accent[3], 0.3)
+  end
+  love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 3)
+  love.graphics.setColor(hideFn and ui.color.textDim or ui.color.accent)
+  love.graphics.print("fn", btnX + 4, btnY + 1)
+  ui._navRects["inspector_hide_fn"] = {
+    x = btnX, y = btnY, w = btnW, h = btnH,
+    action = "toggle_hide_functions"
+  }
+
+  -- Gather script globals with origin info
+  local pinned = {}
+  local mainGlobals = {}
+  local moduleGlobals = {} -- { [modname] = { items } }
+
+  if sandbox.env then
+    for k, v in pairs(sandbox.env) do
+      if not inspector_builtin_globals[k] then
+        -- Apply hideFunctions filter
+        if state.inspector.hideFunctions and type(v) == "function" then
+          -- Skip functions
+        else
+          local origin = sandbox.globalOrigins and sandbox.globalOrigins[k] or "main"
+          local item = { key = k, value = v, origin = origin }
+
+          if is_global_pinned(k) then
+            table.insert(pinned, item)
+          elseif origin == "main" then
+            table.insert(mainGlobals, item)
+          else
+            moduleGlobals[origin] = moduleGlobals[origin] or {}
+            table.insert(moduleGlobals[origin], item)
+          end
+        end
+      end
+    end
+  end
+
+  -- Sort each group
+  local function sortItems(items)
+    table.sort(items, function(a, b) return tostring(a.key) < tostring(b.key) end)
+  end
+  sortItems(pinned)
+  sortItems(mainGlobals)
+  for _, items in pairs(moduleGlobals) do
+    sortItems(items)
+  end
+
+  -- Section: Pinned (if any)
+  if #pinned > 0 then
+    if y + headerH > p.y + NAV_H then
+      draw_section_header(contentX, y, "Pinned")
+    end
+    y = y + headerH + 8
+    for _, item in ipairs(pinned) do
+      local lines = draw_inspector_row(p, item, y, contentX, contentW, lineH, fontH)
+      y = y + lines * lineH
+    end
+    y = y + 8
+    draw_section_separator(p.x, y, p.w)
+    y = y + 12
+  end
+
+  -- Section: Script Globals (main script only)
   if y + headerH > p.y + NAV_H then
     draw_section_header(contentX, y, "Script Globals")
   end
   y = y + headerH + 8
 
-  -- Gather script globals (excluding built-ins)
-  local scriptGlobals = {}
-  if sandbox.env then
-    for k, v in pairs(sandbox.env) do
-      if not inspector_builtin_globals[k] then
-        table.insert(scriptGlobals, { key = k, value = v })
-      end
-    end
-  end
-  table.sort(scriptGlobals, function(a, b) return tostring(a.key) < tostring(b.key) end)
-
-  if #scriptGlobals == 0 then
+  if #mainGlobals == 0 and not next(moduleGlobals) and #pinned == 0 then
     love.graphics.setColor(ui.color.textDim)
     love.graphics.print("(no globals)", contentX + 8, y)
     y = y + lineH
   else
-    for _, item in ipairs(scriptGlobals) do
-      local path = "script." .. tostring(item.key)
-      local _, lines = draw_tree_node(p, path, item.key, item.value, 0, y, contentX, contentW)
+    for _, item in ipairs(mainGlobals) do
+      local lines = draw_inspector_row(p, item, y, contentX, contentW, lineH, fontH)
       y = y + lines * lineH
+    end
+  end
+
+  -- Section: Module globals (grouped by require path)
+  if state.inspector.groupByOrigin and next(moduleGlobals) then
+    local sortedModules = {}
+    for modname in pairs(moduleGlobals) do
+      table.insert(sortedModules, modname)
+    end
+    table.sort(sortedModules)
+
+    for _, modname in ipairs(sortedModules) do
+      local items = moduleGlobals[modname]
+      if #items > 0 then
+        y = y + 8
+        draw_section_separator(p.x, y, p.w)
+        y = y + 12
+        if y + headerH > p.y + NAV_H then
+          draw_section_header(contentX, y, "require('" .. modname .. "')")
+        end
+        y = y + headerH + 8
+        for _, item in ipairs(items) do
+          local lines = draw_inspector_row(p, item, y, contentX, contentW, lineH, fontH)
+          y = y + lines * lineH
+        end
+      end
     end
   end
 
@@ -1665,6 +1790,9 @@ function ui.mousepressed(mx, my, button)
         elseif r.action == "toggle_system_logs" then
           state.logUI.collapsedSources.system = not (state.logUI.collapsedSources.system or false)
           return
+        elseif r.action == "toggle_hide_functions" then
+          state.inspector.hideFunctions = not state.inspector.hideFunctions
+          return
         end
       end
     end
@@ -1677,6 +1805,30 @@ function ui.mousepressed(mx, my, button)
           state.inspector.expanded[r.path] = not state.inspector.expanded[r.path]
           return
         end
+      end
+    end
+  end
+  -- Inspector pin toggle
+  if ui._inspectorPinRects then
+    for globalName, r in pairs(ui._inspectorPinRects) do
+      if r and (mx >= r.x and my >= r.y and mx <= r.x + r.w and my <= r.y + r.h) then
+        -- Toggle pin state
+        if r.isPinned then
+          -- Remove from pinned
+          local newPinned = {}
+          for _, p in ipairs(state.inspector.pinnedGlobals or {}) do
+            if p ~= globalName then
+              table.insert(newPinned, p)
+            end
+          end
+          state.inspector.pinnedGlobals = newPinned
+        else
+          -- Add to pinned
+          state.inspector.pinnedGlobals = state.inspector.pinnedGlobals or {}
+          table.insert(state.inspector.pinnedGlobals, globalName)
+        end
+        ui._inspectorPinsChanged = true
+        return
       end
     end
   end

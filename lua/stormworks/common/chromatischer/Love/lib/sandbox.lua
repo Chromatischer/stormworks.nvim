@@ -3,7 +3,7 @@ local state = require("lib.state")
 local logger = require("lib.logger")
 local storm = require("lib.storm_api")
 
-local sandbox = { env = nil, sim = nil }
+local sandbox = { env = nil, sim = nil, globalOrigins = {} }
 
 -- Helper: temporarily allow setmetatable within the sandbox env for specific phases
 -- Only enabled during: onAttatch(), simulator onInit/onTick/onDebugDraw
@@ -106,6 +106,16 @@ local function make_env()
       if loaded[modname] ~= nil then
         return loaded[modname]
       end
+      -- Snapshot env keys before loading to track new globals
+      local before_keys = {}
+      for k in pairs(env) do before_keys[k] = true end
+      local function track_new_globals()
+        for k in pairs(env) do
+          if not before_keys[k] and not sandbox.globalOrigins[k] then
+            sandbox.globalOrigins[k] = modname
+          end
+        end
+      end
       local rel = modname:gsub("%.", "/")
       local tried = {}
       for _, root in ipairs(state.libPaths or {}) do
@@ -138,6 +148,7 @@ local function make_env()
               end
               logger.append("[require] loaded " .. modname .. note)
             end
+            track_new_globals()
             return ret
           else
             table.insert(tried, cand)
@@ -165,6 +176,7 @@ local function make_env()
                 ret = true
               end
               loaded[modname] = ret
+              track_new_globals()
               return ret
             else
               table.insert(tried, cand)
@@ -218,6 +230,9 @@ local function load_chunk(code, chunkname, env)
 end
 
 function sandbox.load_script()
+  -- Clear origin tracking for fresh load
+  sandbox.globalOrigins = {}
+
   if not state.scriptPath then
     logger.append("[error] No --script path provided")
     return false, "no script"
@@ -228,6 +243,11 @@ function sandbox.load_script()
     return false, err
   end
   local env = make_env()
+
+  -- Snapshot env keys before running main script
+  local before_keys = {}
+  for k in pairs(env) do before_keys[k] = true end
+
   local fn, lerr = load_chunk(code, "@" .. state.scriptPath, env)
   if not fn then
     logger.append("[error] load error: " .. tostring(lerr))
@@ -240,6 +260,14 @@ function sandbox.load_script()
     state.running = false
     return false, runerr
   end
+
+  -- Mark main script globals (those not from require)
+  for k in pairs(env) do
+    if not before_keys[k] and not sandbox.globalOrigins[k] then
+      sandbox.globalOrigins[k] = "main"
+    end
+  end
+
   sandbox.env = env
   sandbox.sim = nil -- clear any previous simulator on fresh load
   -- Reset simulator tracking
