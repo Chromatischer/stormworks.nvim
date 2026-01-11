@@ -72,16 +72,18 @@ describe("Builder", function()
       local script_path = temp_dir .. "/test_addon.lua"
       TestUtils.write_file(script_path, script)
 
-      -- Create empty docs file
-      local docs_path = temp_dir .. "/addon-docs.lua"
-      TestUtils.write_file(docs_path, "")
+      -- Create empty docs files (both required by Builder constructor)
+      local mc_docs_path = temp_dir .. "/mc-docs.lua"
+      TestUtils.write_file(mc_docs_path, "")
+      local addon_docs_path = temp_dir .. "/addon-docs.lua"
+      TestUtils.write_file(addon_docs_path, "")
 
       -- Build
       local builder = builder_class:new(
         {filepath_class:new(temp_dir)},
         filepath_class:new(temp_dir),
-        nil,
-        filepath_class:new(docs_path)
+        filepath_class:new(mc_docs_path),  -- MC docs still required
+        filepath_class:new(addon_docs_path)
       )
 
       local orig, combined, final, outFile = builder:buildAddonScript(

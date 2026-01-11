@@ -36,11 +36,8 @@ end
 
 -- Check if string is valid Lua syntax
 function TestUtils.is_valid_lua(code)
-  local fn, err = loadstring(code)
-  if not fn then
-    -- Try with load for Lua 5.2+
-    fn, err = load(code)
-  end
+  -- Use load which works in Lua 5.2+ (loadstring was deprecated)
+  local fn, err = load(code)
   return fn ~= nil, err
 end
 
@@ -74,10 +71,16 @@ end
 
 -- Setup LifeBoatAPI globals for build system tests
 function TestUtils.setup_lifeboat()
-  local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+  local project_root = TestUtils.get_project_root()
   package.path = project_root .. "/lua/?.lua;" ..
                  project_root .. "/lua/?/init.lua;" ..
                  package.path
+
+  -- Setup vim mock if not already set (needed by FileSystemUtils)
+  if not _G.vim then
+    local MockVim = require("mock_vim")
+    _G.vim = MockVim
+  end
 
   -- Load base LifeBoatAPI classes
   require("stormworks.common.nameouschangey.Common.LifeBoatAPI.Tools.Utils.Base")
@@ -87,8 +90,22 @@ end
 function TestUtils.get_project_root()
   local info = debug.getinfo(1, "S")
   local test_file = info.source:sub(2) -- Remove @ prefix
+  -- Try to find tests/ in the path and get the parent
   local test_dir = test_file:match("^(.*)/tests/")
-  return test_dir or "/home/god/Stormworks/stormworks.nvim"
+  if test_dir then
+    return test_dir
+  end
+  -- Use environment variable if available
+  if os.getenv("STORMWORKS_PROJECT_ROOT") then
+    return os.getenv("STORMWORKS_PROJECT_ROOT")
+  end
+  -- Try to find the project root by looking for lua/stormworks directory
+  local cwd = os.getenv("PWD") or "."
+  if io.open(cwd .. "/lua/stormworks/init.lua", "r") then
+    return cwd
+  end
+  -- Default to current working directory parent of tests
+  return cwd:match("^(.-)/tests$") or cwd
 end
 
 -- Create a simple microcontroller script for testing

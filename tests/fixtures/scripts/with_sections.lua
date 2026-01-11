@@ -1,5 +1,5 @@
----@section MyHelper
-local function MyHelper()
+---@section NotUsedFunction
+local function NotUsedFunction()
   return "helper"
 end
 ---@endsection
@@ -11,8 +11,6 @@ end
 ---@endsection
 
 function onTick()
-  -- MyHelper is not used, section should be removed
-  -- UsedHelper is used, section should be kept
   local result = UsedHelper()
   output.setNumber(1, #result)
 end

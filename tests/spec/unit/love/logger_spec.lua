@@ -1,9 +1,10 @@
 describe("Logger", function()
+  local TestUtils = require("test_utils")
   local logger
   local temp_file
 
   setup(function()
-    local project_root = os.getenv("STORMWORKS_PROJECT_ROOT") or "/home/god/Stormworks/stormworks.nvim"
+    local project_root = TestUtils.get_project_root()
     package.path = project_root .. "/lua/stormworks/common/chromatischer/Love/lib/?.lua;" .. package.path
 
     logger = require("logger")
@@ -12,15 +13,14 @@ describe("Logger", function()
   before_each(function()
     -- Reset logger state
     logger.lines = {}
-    logger.file = nil
+    logger._fh = nil
+    logger._file_path = nil
     logger.max_lines = 1000
   end)
 
   after_each(function()
-    if logger.file then
-      logger.file:close()
-      logger.file = nil
-    end
+    -- Clean up file handle
+    logger.disable_file()
     if temp_file then
       os.remove(temp_file)
       temp_file = nil
@@ -83,21 +83,30 @@ describe("Logger", function()
   describe("enable_file", function()
     it("should enable file logging", function()
       temp_file = "/tmp/test_logger_" .. os.time() .. ".log"
-      logger.enable_file(temp_file, false)
+      local ok, err = logger.enable_file(temp_file, {truncate = true})
 
-      assert.is_not_nil(logger.file)
+      assert.is_true(ok, "enable_file should return true: " .. tostring(err))
+      assert.is_not_nil(logger._fh)
 
-      logger.append("test", "main")
+      logger.append("test message", "main")
 
-      -- Close and check file
-      logger.file:close()
-      logger.file = nil
+      -- Disable file logging (closes the file handle)
+      logger.disable_file()
 
       local f = io.open(temp_file, "r")
       local content = f:read("*a")
       f:close()
 
-      assert.truthy(content:find("test"))
+      assert.truthy(content:find("test message"))
+    end)
+
+    it("should return file path", function()
+      temp_file = "/tmp/test_logger_path_" .. os.time() .. ".log"
+      logger.enable_file(temp_file, {truncate = true})
+
+      assert.equals(temp_file, logger.get_file_path())
+      
+      logger.disable_file()
     end)
   end)
 end)

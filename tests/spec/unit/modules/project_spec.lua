@@ -24,16 +24,18 @@ describe("Project", function()
     TestUtils.remove_temp_dir(temp_dir)
   end)
 
-  describe("detect", function()
+  describe("detect_micro_project", function()
     it("should detect .microproject in current directory", function()
       local marker_path = temp_dir .. "/.microproject"
       TestUtils.write_file(marker_path, "return {is_microcontroller = true}")
       MockVim.setFile(marker_path, "return {is_microcontroller = true}")
+      MockVim._state.cwd = temp_dir
 
-      local detected = project.detect(temp_dir)
+      local detected_path, marker_type, project_root = project.detect_micro_project()
 
-      assert.is_not_nil(detected)
-      assert.equals(temp_dir, detected)
+      assert.is_not_nil(detected_path)
+      assert.equals(".microproject", marker_type)
+      assert.equals(temp_dir, project_root)
     end)
 
     it("should search upward for .microproject", function()
@@ -43,78 +45,89 @@ describe("Project", function()
       local marker_path = temp_dir .. "/.microproject"
       TestUtils.write_file(marker_path, "return {is_microcontroller = true}")
       MockVim.setFile(marker_path, "return {is_microcontroller = true}")
+      MockVim._state.cwd = sub_dir
 
-      local detected = project.detect(sub_dir)
+      local detected_path, marker_type, project_root = project.detect_micro_project()
 
-      assert.is_not_nil(detected)
-      assert.equals(temp_dir, detected)
+      assert.is_not_nil(detected_path)
+      assert.equals(temp_dir, project_root)
     end)
 
     it("should return nil if no .microproject found", function()
-      local detected = project.detect(temp_dir)
+      MockVim._state.cwd = temp_dir
 
-      assert.is_nil(detected)
+      local detected_path, marker_type, project_root = project.detect_micro_project()
+
+      assert.is_nil(detected_path)
+      assert.is_nil(marker_type)
+      assert.is_nil(project_root)
     end)
 
     it("should stop at filesystem root", function()
-      local detected = project.detect("/")
+      MockVim._state.cwd = "/"
 
-      assert.is_nil(detected)
+      local detected_path, marker_type, project_root = project.detect_micro_project()
+
+      assert.is_nil(detected_path)
     end)
   end)
 
-  describe("load_config", function()
-    it("should load project configuration", function()
+  describe("mark_as_micro_project", function()
+    it("should create .microproject file in current directory", function()
+      MockVim._state.cwd = temp_dir
+
+      project.mark_as_micro_project()
+
       local marker_path = temp_dir .. "/.microproject"
-      local config_content = [[
-return {
-  is_microcontroller = true,
-  libraries = {"LifeBoatAPI"},
-}
-]]
-      TestUtils.write_file(marker_path, config_content)
-
-      local config = project.load_config(temp_dir)
-
-      assert.is_table(config)
-      assert.is_true(config.is_microcontroller)
-      assert.is_table(config.libraries)
-    end)
-
-    it("should return default config if file invalid", function()
-      local marker_path = temp_dir .. "/.microproject"
-      TestUtils.write_file(marker_path, "invalid lua syntax {{{")
-
-      local config = project.load_config(temp_dir)
-
-      -- Should return empty/default config
-      assert.is_table(config)
-    end)
-
-    it("should handle missing file", function()
-      local config = project.load_config(temp_dir)
-
-      assert.is_table(config)
+      local content = TestUtils.read_file(marker_path)
+      
+      assert.is_not_nil(content)
+      assert.is_true(content:find("is_microcontroller = true") ~= nil)
     end)
   end)
 
-  describe("setup", function()
-    it("should initialize project from current directory", function()
+  describe("get_build_params", function()
+    it("should return default build parameters", function()
+      -- First set up a project
       local marker_path = temp_dir .. "/.microproject"
       TestUtils.write_file(marker_path, "return {is_microcontroller = true}")
       MockVim.setFile(marker_path, "return {is_microcontroller = true}")
+      MockVim._state.cwd = temp_dir
 
-      local proj = project.setup(temp_dir)
+      -- Set current project in config
+      local config = require("stormworks.modules.config")
+      config.current_project = {
+        path = temp_dir,
+        marker = ".microproject",
+        config = {}
+      }
 
-      assert.is_table(proj)
-      assert.is_not_nil(proj.root)
-      assert.is_table(proj.config)
+      local params = project.get_build_params({})
+
+      assert.is_table(params)
+      assert.equals(true, params.reduceAllWhitespace)
+      assert.equals(true, params.removeComments)
     end)
 
-    it("should return nil if no project detected", function()
-      local proj = project.setup(temp_dir)
+    it("should merge with project-specific settings", function()
+      local config = require("stormworks.modules.config")
+      config.current_project = {
+        path = temp_dir,
+        marker = ".microproject",
+        config = {}
+      }
 
-      assert.is_nil(proj)
+      local project_config = {
+        build_params = {
+          shortenVariables = true
+        }
+      }
+
+      local params = project.get_build_params(project_config)
+
+      assert.equals(true, params.shortenVariables)
+      -- Defaults should still exist
+      assert.equals(true, params.reduceAllWhitespace)
     end)
   end)
 end)
