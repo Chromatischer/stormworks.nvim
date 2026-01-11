@@ -971,12 +971,16 @@ local function draw_inspector_content(p)
   local btnY = p.y + NAV_H + 4
   local hideFn = state.inspector.hideFunctions
   if hideFn then
-    love.graphics.setColor(ui.color.panelBg)
+    love.graphics.setColor(ui.color.panel)
   else
     love.graphics.setColor(ui.color.accent[1], ui.color.accent[2], ui.color.accent[3], 0.3)
   end
   love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 3)
-  love.graphics.setColor(hideFn and ui.color.textDim or ui.color.accent)
+  if hideFn then
+    love.graphics.setColor(ui.color.textDim)
+  else
+    love.graphics.setColor(ui.color.accent)
+  end
   love.graphics.print("fn", btnX + 4, btnY + 1)
   ui._navRects["inspector_hide_fn"] = {
     x = btnX, y = btnY, w = btnW, h = btnH,
