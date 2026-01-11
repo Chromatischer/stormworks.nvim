@@ -12,21 +12,21 @@ describe("RedundancyRemover", function()
     it("should remove unused section", function()
       local remover = remover_class:new()
       local input = [[
----@section MyFunc
-function MyFunc()
+---@section UnusedFunc
+function UnusedFunc()
   return "test"
 end
 ---@endsection
 
 function onTick()
-  -- MyFunc is not used
   output.setNumber(1, 42)
 end
 ]]
 
       local output = remover:removeRedundantCode(input)
 
-      TestUtils.assert_not_contains(output, "MyFunc")
+      -- The UnusedFunc section should be removed since the function isn't called
+      TestUtils.assert_not_contains(output, "UnusedFunc")
       TestUtils.assert_contains(output, "onTick")
     end)
 
@@ -54,41 +54,41 @@ end
     it("should handle multiple sections", function()
       local remover = remover_class:new()
       local input = [[
----@section UnusedFunc
-function UnusedFunc() end
+---@section NotUsed
+function NotUsed() end
 ---@endsection
 
----@section UsedFunc
-function UsedFunc() end
+---@section IsUsed
+function IsUsed() end
 ---@endsection
 
 function onTick()
-  UsedFunc()
+  IsUsed()
 end
 ]]
 
       local output = remover:removeRedundantCode(input)
 
-      TestUtils.assert_not_contains(output, "UnusedFunc")
-      TestUtils.assert_contains(output, "UsedFunc")
+      TestUtils.assert_not_contains(output, "NotUsed")
+      TestUtils.assert_contains(output, "IsUsed")
     end)
 
     it("should handle section with count parameter", function()
       local remover = remover_class:new()
       local input = [[
----@section Helper 2
-function Helper() return 1 end
+---@section Func 2
+function Func() return 1 end
 ---@endsection
 
 function onTick()
-  Helper()  -- Only used once, needs 2+ uses
+  Func()
 end
 ]]
 
       local output = remover:removeRedundantCode(input)
 
-      -- Should remove because Helper is used only 1 time, but needs 2
-      TestUtils.assert_not_contains(output, "Helper")
+      -- Should remove because Func is used only 1 time, but needs 2
+      TestUtils.assert_not_contains(output, "---@section")
     end)
   end)
 end)

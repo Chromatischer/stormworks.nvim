@@ -18,7 +18,7 @@ describe("VariableShortener", function()
     it("should shorten local variables", function()
       local constants = constants_class:new()
       local renamer = renamer_class:new(constants)
-      local shortener = shortener_class:new(renamer)
+      local shortener = shortener_class:new(renamer, constants)
 
       local input = [[
         local myLongVariableName = 100
@@ -37,7 +37,7 @@ describe("VariableShortener", function()
     it("should preserve Lua keywords", function()
       local constants = constants_class:new()
       local renamer = renamer_class:new(constants)
-      local shortener = shortener_class:new(renamer)
+      local shortener = shortener_class:new(renamer, constants)
 
       local input = [[
         local function test()
@@ -59,7 +59,7 @@ describe("VariableShortener", function()
     it("should shorten most-used variables to shortest names", function()
       local constants = constants_class:new()
       local renamer = renamer_class:new(constants)
-      local shortener = shortener_class:new(renamer)
+      local shortener = shortener_class:new(renamer, constants)
 
       local input = [[
         local frequentVar = 1
