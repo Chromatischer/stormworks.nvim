@@ -637,6 +637,59 @@ function love.keypressed(key)
     return
   end
 
+  -- Handle inspector edit mode - highest priority
+  if ui._inspectorEdit and ui._inspectorEdit.active then
+    if key == "return" or key == "kpenter" then
+      -- Accept edit and update value
+      local text = ui._inspectorEdit.text
+      local valueType = ui._inspectorEdit.valueType
+      local globalKey = ui._inspectorEdit.globalKey
+      local newValue = nil
+      local valid = false
+
+      if valueType == "string" then
+        newValue = text
+        valid = true
+      elseif valueType == "number" then
+        newValue = tonumber(text)
+        valid = (newValue ~= nil)
+      elseif valueType == "boolean" then
+        if text == "true" then
+          newValue = true
+          valid = true
+        elseif text == "false" then
+          newValue = false
+          valid = true
+        end
+      end
+
+      if valid and sandbox.env and globalKey then
+        sandbox.env[globalKey] = newValue
+        logger.append("[inspector] Set " .. globalKey .. " = " .. tostring(newValue))
+      end
+
+      ui._inspectorEdit.active = false
+      ui._inspectorEdit.path = nil
+      ui._inspectorEdit.globalKey = nil
+      ui._inspectorEdit.text = ""
+      ui._inspectorEdit.valueType = nil
+      return
+    elseif key == "escape" then
+      -- Cancel edit
+      ui._inspectorEdit.active = false
+      ui._inspectorEdit.path = nil
+      ui._inspectorEdit.globalKey = nil
+      ui._inspectorEdit.text = ""
+      ui._inspectorEdit.valueType = nil
+      return
+    elseif key == "backspace" then
+      ui._inspectorEdit.text = ui._inspectorEdit.text:sub(1, -2)
+      return
+    end
+    -- All other keys fall through to textinput handler
+    return
+  end
+
   -- Handle search input - block all keybinds when search is active
   if state.logUI.searchActive then
     if key == "backspace" then
@@ -693,6 +746,10 @@ function love.keypressed(key)
 end
 
 function love.textinput(text)
+  if ui._inspectorEdit and ui._inspectorEdit.active then
+    ui._inspectorEdit.text = ui._inspectorEdit.text .. text
+    return
+  end
   if state.logUI.searchActive then
     state.logUI.searchText = state.logUI.searchText .. text
   end

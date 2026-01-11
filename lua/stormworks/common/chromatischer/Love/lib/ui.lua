@@ -811,6 +811,16 @@ end
 ui._inspectorRects = {}
 ui._inspectorPinRects = {}
 ui._inspectorPinsChanged = false
+ui._inspectorValueRects = {} -- { path = { x, y, w, h, valueType, globalKey } }
+ui._inspectorEdit = {
+  active = false,
+  path = nil,         -- full path like "script.myVar"
+  globalKey = nil,    -- just the key name for top-level editing
+  text = "",          -- current edit text
+  valueType = nil,    -- "string", "number", "boolean"
+  lastClickTime = 0,
+  lastClickPath = nil,
+}
 
 local function draw_tree_node(p, path, key, value, indent, y, contentX, contentW)
   local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
@@ -868,22 +878,55 @@ local function draw_tree_node(p, path, key, value, indent, y, contentX, contentW
   valX = valX + 8
 
   local maxValW = contentX + contentW - valX - 8
-  local valStr = format_value(value, math.floor(maxValW / 7))
-  if isTable then
+  local t = type(value)
+  local isEditable = (t == "string" or t == "number" or t == "boolean")
+  local isEditing = ui._inspectorEdit.active and ui._inspectorEdit.path == path
+
+  if isEditing then
+    -- Draw edit field
+    local editW = math.min(200, maxValW)
+    local editH = lineH - 2
+    -- Background
+    love.graphics.setColor(ui.color.panelAlt)
+    love.graphics.rectangle("fill", valX, y, editW, editH, 2)
+    -- Border
+    love.graphics.setColor(ui.color.accent)
+    love.graphics.rectangle("line", valX, y, editW, editH, 2)
+    -- Text
     love.graphics.setColor(ui.color.text)
+    local displayText = ui._inspectorEdit.text
+    -- Add cursor
+    if math.floor(love.timer.getTime() * 2) % 2 == 0 then
+      displayText = displayText .. "|"
+    end
+    love.graphics.print(displayText, valX + 4, y + 1)
   else
-    local t = type(value)
-    if t == "number" then
-      love.graphics.setColor(0.6, 0.8, 1, 1)
-    elseif t == "string" then
-      love.graphics.setColor(0.8, 1, 0.6, 1)
-    elseif t == "boolean" then
-      love.graphics.setColor(1, 0.7, 0.5, 1)
+    -- Draw static value
+    local valStr = format_value(value, math.floor(maxValW / 7))
+    if isTable then
+      love.graphics.setColor(ui.color.text)
     else
-      love.graphics.setColor(ui.color.textDim)
+      if t == "number" then
+        love.graphics.setColor(0.6, 0.8, 1, 1)
+      elseif t == "string" then
+        love.graphics.setColor(0.8, 1, 0.6, 1)
+      elseif t == "boolean" then
+        love.graphics.setColor(1, 0.7, 0.5, 1)
+      else
+        love.graphics.setColor(ui.color.textDim)
+      end
+    end
+    love.graphics.print(valStr, valX, y)
+
+    -- Register editable value hit rect
+    if isEditable then
+      local valW = font:getWidth(valStr)
+      ui._inspectorValueRects[path] = {
+        x = valX, y = y, w = valW, h = lineH,
+        valueType = t, path = path
+      }
     end
   end
-  love.graphics.print(valStr, valX, y)
 
   -- Register hit region for expandable nodes
   if isTable then
@@ -959,6 +1002,7 @@ local function draw_inspector_content(p)
   -- Clear previous hit regions
   ui._inspectorRects = {}
   ui._inspectorPinRects = {}
+  ui._inspectorValueRects = {}
 
   local contentX = p.x + 8
   local contentW = p.w - 16
@@ -1796,6 +1840,39 @@ function ui.mousepressed(mx, my, button)
           return
         elseif r.action == "toggle_hide_functions" then
           state.inspector.hideFunctions = not state.inspector.hideFunctions
+          return
+        end
+      end
+    end
+  end
+  -- Inspector value double-click to edit
+  if ui._inspectorValueRects then
+    for path, r in pairs(ui._inspectorValueRects) do
+      if r and (mx >= r.x and my >= r.y and mx <= r.x + r.w and my <= r.y + r.h) then
+        local now = love.timer.getTime()
+        local isDoubleClick = (now - ui._inspectorEdit.lastClickTime < 0.3 and ui._inspectorEdit.lastClickPath == path)
+        ui._inspectorEdit.lastClickTime = now
+        ui._inspectorEdit.lastClickPath = path
+
+        if isDoubleClick then
+          -- Extract global key from path (script.myVar -> myVar)
+          local globalKey = path:match("^script%.([^%.]+)$")
+          if globalKey and sandbox.env and sandbox.env[globalKey] then
+            local value = sandbox.env[globalKey]
+            local valueType = type(value)
+            -- Initialize edit mode
+            ui._inspectorEdit.active = true
+            ui._inspectorEdit.path = path
+            ui._inspectorEdit.globalKey = globalKey
+            ui._inspectorEdit.valueType = valueType
+            if valueType == "string" then
+              ui._inspectorEdit.text = value
+            elseif valueType == "number" then
+              ui._inspectorEdit.text = tostring(value)
+            elseif valueType == "boolean" then
+              ui._inspectorEdit.text = tostring(value)
+            end
+          end
           return
         end
       end
