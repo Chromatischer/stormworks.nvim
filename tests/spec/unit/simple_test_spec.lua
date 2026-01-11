@@ -1,0 +1,16 @@
+describe("Simple Test", function()
+  describe("basic functionality", function()
+    it("should pass a simple assertion", function()
+      assert.equals(2, 1 + 1)
+    end)
+
+    it("should handle strings", function()
+      assert.equals("hello", "hello")
+    end)
+
+    it("should handle booleans", function()
+      assert.is_true(true)
+      assert.is_false(false)
+    end)
+  end)
+end)
