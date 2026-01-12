@@ -15,8 +15,8 @@ local state = {
   tilesY = 2,
   gameCanvasScale = 3, -- default integer zoom
 
-  -- Debug canvas settings
-  debugCanvasEnabled = false,
+  -- User debug canvas settings (for onDebugDraw callbacks)
+  userDebugCanvasEnabled = false,
   debugCanvasW = 512,
   debugCanvasH = 512,
   debugCanvasScale = 1,
@@ -72,7 +72,7 @@ local state = {
     tiles = false,
     tick = false,
     scale = false,
-    debugCanvas = false,
+    userDebug = false,
     debugOverlay = false,
   },
 

@@ -90,7 +90,7 @@ function screen_api.clear(r,g,b,a) love.graphics.clear(to255(r or 0,g or 0,b or 
 -- Debug API that draws to debug canvas even when called during onDraw
 local function with_debug_canvas(fn)
   return function(...)
-    if not state.debugCanvasEnabled or not canvases or not canvases.debug then return end
+    if not state.userDebugCanvasEnabled or not canvases or not canvases.debug then return end
     local prev = love.graphics.getCanvas()
     love.graphics.setCanvas(canvases.debug)
     fn(...)
@@ -129,7 +129,7 @@ function M.draw_user_onDraw(env)
   canvases.withTarget('game', function()
     if env.onDraw then env.onDraw() end
   end)
-  if state.debugCanvasEnabled then
+  if state.userDebugCanvasEnabled then
     canvases.withTarget('debug', function()
       if env.onDebugDraw then env.onDebugDraw() end -- optional
     end)

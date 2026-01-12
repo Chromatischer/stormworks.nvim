@@ -297,8 +297,8 @@ function sandbox.load_script()
         if cfg.scale and not overrides.scale then
           state.gameCanvasScale = tonumber(cfg.scale) or state.gameCanvasScale
         end
-        if cfg.debugCanvas ~= nil and not overrides.debugCanvas then
-          state.debugCanvasEnabled = not not cfg.debugCanvas
+        if cfg.debugCanvas ~= nil and not overrides.userDebug then
+          state.userDebugCanvasEnabled = not not cfg.debugCanvas
         end
         -- tiles
         if not overrides.tiles and cfg.tiles then
