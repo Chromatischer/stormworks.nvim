@@ -745,13 +745,31 @@ function love.keypressed(key)
   end
 end
 
+local function sanitizeTextInput(text, current, maxLen)
+  -- Remove control characters to avoid display issues or control sequences
+  text = text:gsub("%c", "")
+
+  if maxLen and maxLen > 0 then
+    local currentLen = current and #current or 0
+    local remaining = maxLen - currentLen
+    if remaining <= 0 then
+      return current or ""
+    end
+    if #text > remaining then
+      text = text:sub(1, remaining)
+    end
+  end
+
+  return (current or "") .. text
+end
+
 function love.textinput(text)
   if ui._inspectorEdit and ui._inspectorEdit.active then
-    ui._inspectorEdit.text = ui._inspectorEdit.text .. text
+    ui._inspectorEdit.text = sanitizeTextInput(text, ui._inspectorEdit.text, 1024)
     return
   end
   if state.logUI.searchActive then
-    state.logUI.searchText = state.logUI.searchText .. text
+    state.logUI.searchText = sanitizeTextInput(text, state.logUI.searchText, 256)
   end
 end
 
