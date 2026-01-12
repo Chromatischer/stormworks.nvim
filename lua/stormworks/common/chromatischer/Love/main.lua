@@ -433,7 +433,7 @@ local function safe_load_microproject(config_path)
     next = next,
     select = select,
     unpack = unpack or table.unpack,
-    -- Safe standard libraries
+    -- Safe standard libraries (string, table, math contain no IO/system access)
     string = string,
     table = table,
     math = math,
@@ -451,13 +451,13 @@ local function safe_load_microproject(config_path)
   -- Load the code in the sandboxed environment
   local chunk, load_err
   if setfenv then
-    -- Lua 5.1
+    -- Lua 5.1 (LuaJIT and older Lua versions)
     chunk, load_err = loadstring(content, config_path)
     if chunk then
       setfenv(chunk, sandbox)
     end
   else
-    -- Lua 5.2+
+    -- Lua 5.2+ with "t" mode to prevent binary chunk execution
     chunk, load_err = load(content, config_path, "t", sandbox)
   end
   
@@ -491,9 +491,9 @@ local function validate_microproject_config(cfg)
   -- Whitelist: libraries (array of strings)
   if type(cfg.libraries) == "table" then
     clean.libraries = {}
-    for i, v in ipairs(cfg.libraries) do
+    for _, v in ipairs(cfg.libraries) do
       if type(v) == "string" then
-        clean.libraries[i] = v
+        table.insert(clean.libraries, v)
       end
     end
   end
@@ -505,9 +505,9 @@ local function validate_microproject_config(cfg)
     -- Whitelist: inspector.pinnedGlobals (array of strings)
     if type(cfg.inspector.pinnedGlobals) == "table" then
       clean.inspector.pinnedGlobals = {}
-      for i, v in ipairs(cfg.inspector.pinnedGlobals) do
+      for _, v in ipairs(cfg.inspector.pinnedGlobals) do
         if type(v) == "string" then
-          clean.inspector.pinnedGlobals[i] = v
+          table.insert(clean.inspector.pinnedGlobals, v)
         end
       end
     end
