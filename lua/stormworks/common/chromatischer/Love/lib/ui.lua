@@ -1182,8 +1182,8 @@ function ui.layout(w, h)
   local rightW = ui.mergedOutputs and 0 or (ui.minimized.outputs and COLLAPSE_W or 320)
   local gameWpx = state.tilesX * state.tileSize * state.gameCanvasScale
   local gameHpx = state.tilesY * state.tileSize * state.gameCanvasScale
-  local dbgWpx = state.debugCanvasEnabled and (state.debugCanvasW * state.debugCanvasScale) or 0
-  local dbgHpx = state.debugCanvasEnabled and (state.debugCanvasH * state.debugCanvasScale) or 0
+  local dbgWpx = state.userDebugCanvasEnabled and (state.debugCanvasW * state.debugCanvasScale) or 0
+  local dbgHpx = state.userDebugCanvasEnabled and (state.debugCanvasH * state.debugCanvasScale) or 0
   local centerW = math.max(gameWpx + 16, dbgWpx + 16, 200)
   local availableCenterW = math.max(200, w - 24 - leftW - rightW - 20)
 
@@ -1203,7 +1203,7 @@ function ui.layout(w, h)
   local centerX = ui.panels.io_inputs.x + leftW + (leftW > 0 and 10 or 0)
   local nextY = midTop
   local gameH = ui.minimized.game and COLLAPSE_H or math.min(midH, gameHpx + 16 + NAV_H)
-  local debugH = state.debugCanvasEnabled and (ui.minimized.debug and COLLAPSE_H or (dbgHpx + 16 + NAV_H)) or 0
+  local debugH = state.userDebugCanvasEnabled and (ui.minimized.debug and COLLAPSE_H or (dbgHpx + 16 + NAV_H)) or 0
   ui.panels.game = { x = centerX, y = nextY, w = centerW, h = gameH }
   nextY = nextY + (gameH > 0 and (gameH + (debugH > 0 and 10 or 0)) or 0)
   ui.panels.debug_center = { x = centerX, y = nextY, w = centerW, h = debugH }
@@ -1222,7 +1222,7 @@ function ui.layout(w, h)
       "[UI Layout] Window: %dx%d | Game: %dx%d @ %.1fx | Debug: %s | Minimized: I=%s G=%s O=%s D=%s L=%s",
       w, h,
       state.gameCanvasW or 0, state.gameCanvasH or 0, state.gameCanvasScale or 1,
-      state.debugCanvasEnabled and "ON" or "OFF",
+      state.userDebugCanvasEnabled and "ON" or "OFF",
       ui.minimized.inputs and "Y" or "N",
       ui.minimized.game and "Y" or "N",
       ui.minimized.outputs and "Y" or "N",
@@ -1275,9 +1275,9 @@ function ui.draw_toolbar()
   x = x
     + draw_toolbar_icon_button(x, y, {
       name = "bug",
-      active = state.debugCanvasEnabled,
+      active = state.userDebugCanvasEnabled,
       action = "toggle_debug",
-      tooltip = (state.debugCanvasEnabled and "Disable Debug Canvas [D]" or "Enable Debug Canvas [D]"),
+      tooltip = (state.userDebugCanvasEnabled and "Disable Debug Canvas [D]" or "Enable Debug Canvas [D]"),
     })
     + 16
 
@@ -1433,7 +1433,7 @@ function ui.draw_debug_canvas_center()
   local cx = p.x + 8
   local cy = p.y + NAV_H + 8
   -- cache rect for hit testing
-  if state.debugCanvasEnabled then
+  if state.userDebugCanvasEnabled then
     ui._canvasRects.debug = {
       x = cx,
       y = cy,
@@ -1709,7 +1709,7 @@ function ui.mousepressed(mx, my, button)
     end
   end
   update_touch('game')
-  if state.debugCanvasEnabled then update_touch('debug') end
+  if state.userDebugCanvasEnabled then update_touch('debug') end
 
   if button ~= 1 then
     return
@@ -1769,7 +1769,7 @@ function ui.mousepressed(mx, my, button)
           sandbox.reload()
           return
         elseif r.action == "toggle_debug" then
-          state.debugCanvasEnabled = not state.debugCanvasEnabled
+          state.userDebugCanvasEnabled = not state.userDebugCanvasEnabled
           canvases.recreateAll()
           return
         elseif r.action == "scale_minus" then
@@ -1961,7 +1961,7 @@ function ui.mousereleased(mx, my, button)
     if button == 2 then t.right = false end
   end
   update_release('game')
-  if state.debugCanvasEnabled then update_release('debug') end
+  if state.userDebugCanvasEnabled then update_release('debug') end
 
   if button == 1 then
     ui._activeSlider = nil
@@ -1995,7 +1995,7 @@ function ui.mousemoved(mx, my, dx, dy)
     end
   end
   update_move('game')
-  if state.debugCanvasEnabled then update_move('debug') end
+  if state.userDebugCanvasEnabled then update_move('debug') end
 
   if ui._activeSlider then
     local i = ui._activeSlider.idx
@@ -2158,7 +2158,7 @@ function ui.draw_export_modal()
 
   -- Debug button
   local debug_x = canvas_x + canvas_btn_w + btn_gap
-  local debug_disabled = not state.debugCanvasEnabled
+  local debug_disabled = not state.userDebugCanvasEnabled
   local debug_hover = (mx >= debug_x and my >= y and mx < debug_x + canvas_btn_w and my < y + btn_h)
   local debug_active = (state.export.capture == "debug")
   love.graphics.setColor(debug_disabled and { 0.15, 0.15, 0.15, 1 } or (debug_active and ui.color.accent or (debug_hover and { 0.28, 0.28, 0.34, 1 } or { 0.22, 0.22, 0.26, 1 })))
@@ -2171,7 +2171,7 @@ function ui.draw_export_modal()
 
   -- Both button
   local both_x = debug_x + canvas_btn_w + btn_gap
-  local both_disabled = not state.debugCanvasEnabled
+  local both_disabled = not state.userDebugCanvasEnabled
   local both_hover = (mx >= both_x and my >= y and mx < both_x + canvas_btn_w and my < y + btn_h)
   local both_active = (state.export.capture == "both")
   love.graphics.setColor(both_disabled and { 0.15, 0.15, 0.15, 1 } or (both_active and ui.color.accent or (both_hover and { 0.28, 0.28, 0.34, 1 } or { 0.22, 0.22, 0.26, 1 })))

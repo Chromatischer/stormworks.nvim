@@ -91,9 +91,9 @@ local function parse_args(args)
     -- Enable user debug canvas (512x512 for onDebugDraw callbacks)
     elseif a == "--user-debug" and args[i + 1] then
       local v = tostring(args[i + 1])
-      state.debugCanvasEnabled = (v == "true" or v == "1" or v == "on")
+      state.userDebugCanvasEnabled = (v == "true" or v == "1" or v == "on")
       if state.cliOverrides then
-        state.cliOverrides.debugCanvas = true
+        state.cliOverrides.userDebug = true
       end
       i = i + 2
     -- Enable UI layer debug overlay (panel boundaries, hit areas)
@@ -570,7 +570,7 @@ function love.draw()
   end
 
   -- Debug canvas: always render content if enabled so detached viewer updates
-  if state.debugCanvasEnabled then
+  if state.userDebugCanvasEnabled then
     canvases.ensure()
     -- Always render into debug canvas (even when detached/minimized)
     do
@@ -720,13 +720,13 @@ function love.keypressed(key)
   elseif key == "-" then
     state.gameCanvasScale = math.max(1, state.gameCanvasScale - 1)
   elseif key == "d" then
-    state.debugCanvasEnabled = not state.debugCanvasEnabled
+    state.userDebugCanvasEnabled = not state.userDebugCanvasEnabled
     canvases.recreateAll()
   elseif key == "f5" then
     detach.toggle("game")
   elseif key == "f6" then
-    if not state.debugCanvasEnabled then
-      state.debugCanvasEnabled = true
+    if not state.userDebugCanvasEnabled then
+      state.userDebugCanvasEnabled = true
       canvases.recreateAll()
     end
     detach.toggle("debug")
