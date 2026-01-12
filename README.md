@@ -185,7 +185,7 @@ The project includes a comprehensive test suite using Busted. Tests cover:
 cd tests
 make test           # Run all tests
 make test-unit      # Run unit tests only
-make test-int       # Run integration tests only
+make test-integration # Run integration tests only
 make coverage       # Generate coverage report
 ```
 
