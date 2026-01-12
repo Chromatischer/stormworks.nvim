@@ -88,11 +88,20 @@ local function parse_args(args)
         state.cliOverrides.scale = true
       end
       i = i + 2
-    elseif a == "--debug-canvas" and args[i + 1] then
+    -- Enable user debug canvas (512x512 for onDebugDraw callbacks)
+    elseif a == "--user-debug" and args[i + 1] then
       local v = tostring(args[i + 1])
       state.debugCanvasEnabled = (v == "true" or v == "1" or v == "on")
       if state.cliOverrides then
         state.cliOverrides.debugCanvas = true
+      end
+      i = i + 2
+    -- Enable UI layer debug overlay (panel boundaries, hit areas)
+    elseif a == "--debug-canvas" and args[i + 1] then
+      local v = tostring(args[i + 1])
+      state.debugOverlayEnabled = (v == "true" or v == "1" or v == "on")
+      if state.cliOverrides then
+        state.cliOverrides.debugOverlay = true
       end
       i = i + 2
     elseif a == "--max-error-repeats" and args[i + 1] then
@@ -108,6 +117,25 @@ local function parse_args(args)
           state.properties[key] = num
         else
           state.properties[key] = val
+        end
+      end
+      i = i + 2
+    elseif a == "--inspector-hide-functions" and args[i + 1] then
+      local v = tostring(args[i + 1])
+      state.inspector.hideFunctions = (v == "true" or v == "1")
+      i = i + 2
+    elseif a == "--inspector-group-by-origin" and args[i + 1] then
+      local v = tostring(args[i + 1])
+      state.inspector.groupByOrigin = (v == "true" or v == "1")
+      i = i + 2
+    elseif a == "--inspector-pinned" and args[i + 1] then
+      -- Comma-separated list of pinned global names
+      local s = args[i + 1]
+      state.inspector.pinnedGlobals = {}
+      for name in s:gmatch("[^,]+") do
+        local trimmed = name:match("^%s*(.-)%s*$")
+        if trimmed and #trimmed > 0 then
+          table.insert(state.inspector.pinnedGlobals, trimmed)
         end
       end
       i = i + 2
@@ -336,6 +364,102 @@ local function perform_export()
   end
 end
 
+-- Pin persistence: save pinned globals to .microproject
+local pin_persist_state = {
+  lastSaveTime = 0,
+  debounceDelay = 1.0, -- seconds
+}
+
+local function serialize_lua_value(v, indent)
+  indent = indent or 0
+  local t = type(v)
+  if t == "string" then
+    return string.format("%q", v)
+  elseif t == "number" or t == "boolean" then
+    return tostring(v)
+  elseif t == "nil" then
+    return "nil"
+  elseif t == "table" then
+    local parts = {}
+    local count = 0
+    for _ in pairs(v) do count = count + 1 end
+    if count == #v and count > 0 then
+      -- Array-style
+      for _, val in ipairs(v) do
+        table.insert(parts, serialize_lua_value(val, indent + 1))
+      end
+      return "{ " .. table.concat(parts, ", ") .. " }"
+    else
+      -- Object-style
+      local ws = string.rep("  ", indent + 1)
+      local sorted_keys = {}
+      for k in pairs(v) do table.insert(sorted_keys, k) end
+      table.sort(sorted_keys, function(a, b) return tostring(a) < tostring(b) end)
+      for _, k in ipairs(sorted_keys) do
+        local key_str
+        if type(k) == "string" and k:match("^[%a_][%w_]*$") then
+          key_str = k
+        else
+          key_str = "[" .. serialize_lua_value(k, 0) .. "]"
+        end
+        table.insert(parts, ws .. key_str .. " = " .. serialize_lua_value(v[k], indent + 1))
+      end
+      local close_ws = string.rep("  ", indent)
+      return "{\n" .. table.concat(parts, ",\n") .. "\n" .. close_ws .. "}"
+    end
+  end
+  return "nil"
+end
+
+local function find_microproject_path()
+  if not state.scriptPath then return nil end
+  local dir = state.scriptPath:match("^(.*)/[^/]+$")
+  while dir and #dir > 0 do
+    local config_path = dir .. "/.microproject"
+    local f = io.open(config_path, "r")
+    if f then
+      f:close()
+      return config_path
+    end
+    local parent = dir:match("^(.*)/[^/]+$")
+    if not parent or parent == dir then break end
+    dir = parent
+  end
+  return nil
+end
+
+local function persist_inspector_pins()
+  local config_path = find_microproject_path()
+  if not config_path then return false, "no .microproject found" end
+
+  -- Read existing config
+  local ok, cfg = pcall(dofile, config_path)
+  if not ok or type(cfg) ~= "table" then
+    cfg = {}
+  end
+
+  -- Update inspector section
+  cfg.inspector = cfg.inspector or {}
+  cfg.inspector.pinnedGlobals = state.inspector.pinnedGlobals or {}
+
+  -- Write back
+  local out = io.open(config_path, "w")
+  if not out then return false, "cannot write to " .. config_path end
+  out:write("return " .. serialize_lua_value(cfg, 0) .. "\n")
+  out:close()
+  logger.append("[info] Saved pinned globals to " .. config_path)
+  return true
+end
+
+local function check_pin_persistence()
+  if not ui._inspectorPinsChanged then return end
+  local now = love.timer.getTime()
+  if now - pin_persist_state.lastSaveTime < pin_persist_state.debounceDelay then return end
+  pin_persist_state.lastSaveTime = now
+  ui._inspectorPinsChanged = false
+  persist_inspector_pins()
+end
+
 function love.update(dt)
   if state.detached.enabled then
     -- Poll for updated frame in detached viewer
@@ -393,6 +517,9 @@ function love.update(dt)
     state.export.doExport = false
     perform_export()
   end
+
+  -- Check if inspector pins need to be persisted (debounced)
+  check_pin_persistence()
 end
 
 function love.draw()
@@ -506,6 +633,11 @@ function love.draw()
   ui.draw_export_modal()
   ui.draw_export_toast()
 
+  -- UI debug overlay (for development)
+  if state.debugOverlayEnabled then
+    ui.draw_debug_overlay()
+  end
+
   -- Update detached frame writers after rendering
   detach.update()
 end
@@ -515,6 +647,59 @@ function love.keypressed(key)
     if key == "escape" then
       love.event.quit()
     end
+    return
+  end
+
+  -- Handle inspector edit mode - highest priority
+  if ui._inspectorEdit and ui._inspectorEdit.active then
+    if key == "return" or key == "kpenter" then
+      -- Accept edit and update value
+      local text = ui._inspectorEdit.text
+      local valueType = ui._inspectorEdit.valueType
+      local globalKey = ui._inspectorEdit.globalKey
+      local newValue = nil
+      local valid = false
+
+      if valueType == "string" then
+        newValue = text
+        valid = true
+      elseif valueType == "number" then
+        newValue = tonumber(text)
+        valid = (newValue ~= nil)
+      elseif valueType == "boolean" then
+        if text == "true" then
+          newValue = true
+          valid = true
+        elseif text == "false" then
+          newValue = false
+          valid = true
+        end
+      end
+
+      if valid and sandbox.env and globalKey then
+        sandbox.env[globalKey] = newValue
+        logger.append("[inspector] Set " .. globalKey .. " = " .. tostring(newValue))
+      end
+
+      ui._inspectorEdit.active = false
+      ui._inspectorEdit.path = nil
+      ui._inspectorEdit.globalKey = nil
+      ui._inspectorEdit.text = ""
+      ui._inspectorEdit.valueType = nil
+      return
+    elseif key == "escape" then
+      -- Cancel edit
+      ui._inspectorEdit.active = false
+      ui._inspectorEdit.path = nil
+      ui._inspectorEdit.globalKey = nil
+      ui._inspectorEdit.text = ""
+      ui._inspectorEdit.valueType = nil
+      return
+    elseif key == "backspace" then
+      ui._inspectorEdit.text = ui._inspectorEdit.text:sub(1, -2)
+      return
+    end
+    -- All other keys fall through to textinput handler
     return
   end
 
@@ -573,9 +758,31 @@ function love.keypressed(key)
   end
 end
 
+local function sanitizeTextInput(text, current, maxLen)
+  -- Remove control characters to avoid display issues or control sequences
+  text = text:gsub("%c", "")
+
+  if maxLen and maxLen > 0 then
+    local currentLen = current and #current or 0
+    local remaining = maxLen - currentLen
+    if remaining <= 0 then
+      return current or ""
+    end
+    if #text > remaining then
+      text = text:sub(1, remaining)
+    end
+  end
+
+  return (current or "") .. text
+end
+
 function love.textinput(text)
+  if ui._inspectorEdit and ui._inspectorEdit.active then
+    ui._inspectorEdit.text = sanitizeTextInput(text, ui._inspectorEdit.text, 1024)
+    return
+  end
   if state.logUI.searchActive then
-    state.logUI.searchText = state.logUI.searchText .. text
+    state.logUI.searchText = sanitizeTextInput(text, state.logUI.searchText, 256)
   end
 end
 

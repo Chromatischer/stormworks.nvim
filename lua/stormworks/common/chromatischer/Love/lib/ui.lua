@@ -61,7 +61,8 @@ ui._numRects = {}
 ui._activeSlider = nil
 ui._navRects = {}
 ui._toolbarRects = {}
-ui.leftTab = "inputs" -- for merged mode (Inputs | Outputs)
+ui.leftTab = "inputs" -- for merged mode (Inputs | Outputs | Inspector)
+ui.rightTab = "outputs" -- for non-merged mode (Outputs | Inspector)
 ui._hoverTip = nil
 ui.minimized = { inputs = false, outputs = false, game = false, debug = false, log = false }
 
@@ -108,11 +109,17 @@ local function draw_rounded_button(x, y, w, h, color, hover)
 end
 
 -- Small toggle knob used by Inputs UI
-local function draw_bool_toggle(x, y, val)
+local function draw_bool_toggle(x, y, val, isSimDriven)
   local r = 12
-  love.graphics.setColor(0.15, 0.15, 0.15, 1)
+  -- Background: darker when simulator-driven
+  love.graphics.setColor(isSimDriven and {0.12, 0.12, 0.12, 1} or {0.15, 0.15, 0.15, 1})
   love.graphics.rectangle("fill", x - 15, y - 15, 30, 30, 3, 3)
-  love.graphics.setColor(val and ui.color.accent or { 0.25, 0.25, 0.25, 1 })
+  -- Circle: dimmed when simulator-driven
+  if val then
+    love.graphics.setColor(isSimDriven and {0.5, 0.3, 0.15, 1} or ui.color.accent)
+  else
+    love.graphics.setColor(isSimDriven and {0.18, 0.18, 0.18, 1} or {0.25, 0.25, 0.25, 1})
+  end
   love.graphics.circle("fill", x, y, r)
 end
 
@@ -197,32 +204,52 @@ local function draw_nav_bar(p, title, which)
   ui._navRects = ui._navRects or {}
 
   if which == "left" and ui.mergedOutputs then
-    -- Split header into two equal clickable halves: I | O
-    local mid = p.x + math.floor(p.w / 2)
-    local leftR = { x = p.x, y = p.y, w = mid - p.x, h = NAV_H }
-    local rightR = { x = mid, y = p.y, w = p.x + p.w - mid, h = NAV_H }
+    -- Split header into three equal clickable parts: I | O | Insp
+    local third = math.floor(p.w / 3)
+    local tabRects = {
+      { x = p.x, y = p.y, w = third, h = NAV_H, label = "I", tab = "inputs" },
+      { x = p.x + third, y = p.y, w = third, h = NAV_H, label = "O", tab = "outputs" },
+      { x = p.x + third * 2, y = p.y, w = p.w - third * 2, h = NAV_H, label = "Insp", tab = "inspector" },
+    }
 
-    -- Left half (I)
-    local leftActive = (ui.leftTab == "inputs")
-    love.graphics.setColor(leftActive and ui.color.accent or { 0.22, 0.22, 0.26, 1 })
-    love.graphics.rectangle("fill", leftR.x, leftR.y, leftR.w, leftR.h, 4, 4)
-    love.graphics.setColor(1, 1, 1, leftActive and 1 or 0.85)
-    love.graphics.printf("I", leftR.x, leftR.y + 3, leftR.w, "center")
-    ui._navRects["left_tab_inputs"] =
-      { x = leftR.x, y = leftR.y, w = leftR.w, h = leftR.h, action = "left_tab", tab = "inputs" }
+    for _, tabDef in ipairs(tabRects) do
+      local isActive = (ui.leftTab == tabDef.tab)
+      love.graphics.setColor(isActive and ui.color.accent or { 0.22, 0.22, 0.26, 1 })
+      love.graphics.rectangle("fill", tabDef.x, tabDef.y, tabDef.w, tabDef.h, 4, 4)
+      love.graphics.setColor(1, 1, 1, isActive and 1 or 0.85)
+      love.graphics.printf(tabDef.label, tabDef.x, tabDef.y + 3, tabDef.w, "center")
+      ui._navRects["left_tab_" .. tabDef.tab] =
+        { x = tabDef.x, y = tabDef.y, w = tabDef.w, h = tabDef.h, action = "left_tab", tab = tabDef.tab }
+    end
 
-    -- Right half (O)
-    local rightActive = (ui.leftTab == "outputs")
-    love.graphics.setColor(rightActive and ui.color.accent or { 0.22, 0.22, 0.26, 1 })
-    love.graphics.rectangle("fill", rightR.x, rightR.y, rightR.w, rightR.h, 4, 4)
-    love.graphics.setColor(1, 1, 1, rightActive and 1 or 0.85)
-    love.graphics.printf("O", rightR.x, rightR.y + 3, rightR.w, "center")
-    ui._navRects["left_tab_outputs"] =
-      { x = rightR.x, y = rightR.y, w = rightR.w, h = rightR.h, action = "left_tab", tab = "outputs" }
-
-    -- Divider line in middle for clarity
+    -- Divider lines between tabs
     love.graphics.setColor(0, 0, 0, 0.25)
-    love.graphics.line(mid, p.y + 2, mid, p.y + NAV_H - 2)
+    love.graphics.line(p.x + third, p.y + 2, p.x + third, p.y + NAV_H - 2)
+    love.graphics.line(p.x + third * 2, p.y + 2, p.x + third * 2, p.y + NAV_H - 2)
+  elseif which == "outputs" then
+    -- Split header into two clickable halves: O | Insp (non-merged mode)
+    -- Reserve space for minimize button on right
+    local btnSpace = 24
+    local availW = p.w - btnSpace
+    local half = math.floor(availW / 2)
+    local tabRects = {
+      { x = p.x, y = p.y, w = half, h = NAV_H, label = "O", tab = "outputs" },
+      { x = p.x + half, y = p.y, w = availW - half, h = NAV_H, label = "Insp", tab = "inspector" },
+    }
+
+    for _, tabDef in ipairs(tabRects) do
+      local isActive = (ui.rightTab == tabDef.tab)
+      love.graphics.setColor(isActive and ui.color.accent or { 0.22, 0.22, 0.26, 1 })
+      love.graphics.rectangle("fill", tabDef.x, tabDef.y, tabDef.w, tabDef.h, 4, 4)
+      love.graphics.setColor(1, 1, 1, isActive and 1 or 0.85)
+      love.graphics.printf(tabDef.label, tabDef.x, tabDef.y + 3, tabDef.w, "center")
+      ui._navRects["right_tab_" .. tabDef.tab] =
+        { x = tabDef.x, y = tabDef.y, w = tabDef.w, h = tabDef.h, action = "right_tab", tab = tabDef.tab }
+    end
+
+    -- Divider line between tabs
+    love.graphics.setColor(0, 0, 0, 0.25)
+    love.graphics.line(p.x + half, p.y + 2, p.x + half, p.y + NAV_H - 2)
   else
     -- Standard title
     love.graphics.setColor(ui.color.text)
@@ -576,28 +603,23 @@ local function draw_inputs_content(p)
       local by = boolInBaseY + row * 40
       local isSimDriven = state.simulatorDriven.inputB[i]
 
-      if isSimDriven then
-        -- Gray out background for simulator-controlled input
-        love.graphics.setColor(0.12, 0.12, 0.12, 0.8)
-        love.graphics.rectangle("fill", bx - 15, by - 15, 30, 30, 3, 3)
-      end
-
-      draw_bool_toggle(bx, by, state.inputB[i])
+      draw_bool_toggle(bx, by, state.inputB[i], isSimDriven)
       ui._boolRects[i] = { x = bx - 15, y = by - 15, w = 30, h = 30 }
 
-      -- Add "SIM" overlay for simulator-driven
+      -- Add centered label inside toggle
+      local font = love.graphics.getFont()
+      local fontHeight = font:getHeight()
       if isSimDriven then
-        love.graphics.setColor(ui.color.warn)
-        love.graphics.print("S", bx + 8, by - 10)
-      end
-
-      -- Add label inside toggle (only when inactive)
-      if not state.inputB[i] then
-        love.graphics.setColor(isSimDriven and {0.3, 0.3, 0.3, 1} or ui.color.textDim)
-        local labelText = string.format("%d", i)
-        local font = love.graphics.getFont()
+        -- Centered "S" overlay for simulator-driven: white when ON, orange when OFF
+        local labelText = "S"
         local labelWidth = font:getWidth(labelText)
-        local fontHeight = font:getHeight()
+        love.graphics.setColor(state.inputB[i] and ui.color.text or ui.color.warn)
+        love.graphics.print(labelText, bx - labelWidth/2, by - fontHeight/2)
+      elseif not state.inputB[i] then
+        -- Channel number only when inactive and not simulator-driven
+        local labelText = string.format("%d", i)
+        local labelWidth = font:getWidth(labelText)
+        love.graphics.setColor(ui.color.textDim)
         love.graphics.print(labelText, bx - labelWidth/2, by - fontHeight/2)
       end
       -- Add tooltip on hover
@@ -725,6 +747,424 @@ local function draw_outputs_content(p)
   end
 end
 
+-- Inspector panel: tree view of script globals and simulator state
+local inspector_builtin_globals = {
+  -- Safe globals from sandbox
+  ["assert"] = true, ["error"] = true, ["ipairs"] = true, ["next"] = true,
+  ["pairs"] = true, ["pcall"] = true, ["select"] = true, ["tonumber"] = true,
+  ["tostring"] = true, ["type"] = true, ["unpack"] = true, ["xpcall"] = true,
+  ["print"] = true,
+  -- Safe tables
+  ["math"] = true, ["string"] = true, ["table"] = true,
+  -- Stormworks API
+  ["input"] = true, ["output"] = true, ["property"] = true, ["screen"] = true,
+  ["dbg"] = true, ["time"] = true,
+  -- Internal
+  ["_G"] = true, ["require"] = true, ["_input_simulator_typehint"] = true,
+  -- Callback functions (user-defined but not data)
+  ["onTick"] = true, ["onDraw"] = true, ["onAttatch"] = true, ["onDebugDraw"] = true,
+}
+
+local function is_array(t)
+  if type(t) ~= "table" then return false end
+  local count = 0
+  for _ in pairs(t) do count = count + 1 end
+  return count == #t and count > 0
+end
+
+local function format_value(v, maxLen)
+  maxLen = maxLen or 30
+  local t = type(v)
+  local str
+  if t == "string" then
+    str = '"' .. v:gsub("\n", "\\n"):gsub("\r", "\\r") .. '"'
+  elseif t == "number" then
+    if v == math.floor(v) then
+      str = tostring(v)
+    else
+      str = string.format("%.4g", v)
+    end
+  elseif t == "boolean" then
+    str = v and "true" or "false"
+  elseif t == "nil" then
+    str = "nil"
+  elseif t == "table" then
+    if is_array(v) then
+      str = string.format("[array:%d]", #v)
+    else
+      local count = 0
+      for _ in pairs(v) do count = count + 1 end
+      str = string.format("{table:%d}", count)
+    end
+  elseif t == "function" then
+    str = "<function>"
+  else
+    str = "<" .. t .. ">"
+  end
+  if #str > maxLen then
+    str = str:sub(1, maxLen - 3) .. "..."
+  end
+  return str
+end
+
+-- Hit regions for inspector tree nodes
+ui._inspectorRects = {}
+ui._inspectorPinRects = {}
+ui._inspectorPinsChanged = false
+ui._inspectorValueRects = {} -- { path = { x, y, w, h, valueType, globalKey } }
+ui._inspectorEdit = {
+  active = false,
+  path = nil,         -- full path like "script.myVar"
+  globalKey = nil,    -- just the key name for top-level editing
+  text = "",          -- current edit text
+  valueType = nil,    -- "string", "number", "boolean"
+  lastClickTime = 0,
+  lastClickPath = nil,
+}
+
+local function draw_tree_node(p, path, key, value, indent, y, contentX, contentW)
+  local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
+  local lineH = fontH + 4
+  local indentPx = indent * 16
+  local x = contentX + indentPx
+
+  -- Check if visible (within scissor region)
+  local panelTop = p.y + NAV_H
+  local panelBottom = p.y + p.h
+  if y + lineH < panelTop or y > panelBottom then
+    -- Still need to count lines for layout, but skip drawing
+    local drawnLines = 1
+    if type(value) == "table" and state.inspector.expanded[path] then
+      local sorted_keys = {}
+      for k in pairs(value) do table.insert(sorted_keys, k) end
+      table.sort(sorted_keys, function(a, b)
+        if type(a) == type(b) then
+          if type(a) == "number" then return a < b end
+          return tostring(a) < tostring(b)
+        end
+        return type(a) == "number"
+      end)
+      for _, k in ipairs(sorted_keys) do
+        local childPath = path .. "." .. tostring(k)
+        local _, childLines = draw_tree_node(p, childPath, k, value[k], indent + 1, y + drawnLines * lineH, contentX, contentW)
+        drawnLines = drawnLines + childLines
+      end
+    end
+    return y + lineH, drawnLines
+  end
+
+  local isTable = type(value) == "table"
+  local isExpanded = state.inspector.expanded[path]
+
+  -- Draw expand/collapse indicator for tables
+  if isTable then
+    local indicator = isExpanded and "v" or ">"
+    love.graphics.setColor(ui.color.textDim)
+    love.graphics.print(indicator, x, y)
+  end
+
+  -- Draw key
+  local keyX = x + (isTable and 12 or 0)
+  local keyStr = type(key) == "number" and string.format("[%d]", key) or tostring(key)
+  love.graphics.setColor(ui.color.accent)
+  love.graphics.print(keyStr, keyX, y)
+
+  -- Draw colon and value
+  local font = love.graphics.getFont()
+  local keyW = font:getWidth(keyStr)
+  local valX = keyX + keyW + 4
+  love.graphics.setColor(ui.color.textDim)
+  love.graphics.print(":", valX, y)
+  valX = valX + 8
+
+  local maxValW = contentX + contentW - valX - 8
+  local t = type(value)
+  local isEditable = (t == "string" or t == "number" or t == "boolean")
+  local isEditing = ui._inspectorEdit.active and ui._inspectorEdit.path == path
+
+  if isEditing then
+    -- Draw edit field
+    local editW = math.min(200, maxValW)
+    local editH = lineH - 2
+    -- Background
+    love.graphics.setColor(ui.color.panelAlt)
+    love.graphics.rectangle("fill", valX, y, editW, editH, 2)
+    -- Border
+    love.graphics.setColor(ui.color.accent)
+    love.graphics.rectangle("line", valX, y, editW, editH, 2)
+    -- Text
+    love.graphics.setColor(ui.color.text)
+    local displayText = ui._inspectorEdit.text
+    -- Add cursor
+    if math.floor(love.timer.getTime() * 2) % 2 == 0 then
+      displayText = displayText .. "|"
+    end
+    love.graphics.print(displayText, valX + 4, y + 1)
+  else
+    -- Draw static value
+    local valStr = format_value(value, math.floor(maxValW / 7))
+    if isTable then
+      love.graphics.setColor(ui.color.text)
+    else
+      if t == "number" then
+        love.graphics.setColor(0.6, 0.8, 1, 1)
+      elseif t == "string" then
+        love.graphics.setColor(0.8, 1, 0.6, 1)
+      elseif t == "boolean" then
+        love.graphics.setColor(1, 0.7, 0.5, 1)
+      else
+        love.graphics.setColor(ui.color.textDim)
+      end
+    end
+    love.graphics.print(valStr, valX, y)
+
+    -- Register editable value hit rect
+    if isEditable then
+      local valW = font:getWidth(valStr)
+      ui._inspectorValueRects[path] = {
+        x = valX, y = y, w = valW, h = lineH,
+        valueType = t, path = path
+      }
+    end
+  end
+
+  -- Register hit region for expandable nodes
+  if isTable then
+    ui._inspectorRects[path] = {
+      x = x, y = y, w = contentW - indentPx, h = lineH,
+      action = "toggle_expand", path = path
+    }
+  end
+
+  -- Recursively draw children if expanded
+  local drawnLines = 1
+  if isTable and isExpanded then
+    local sorted_keys = {}
+    for k in pairs(value) do table.insert(sorted_keys, k) end
+    table.sort(sorted_keys, function(a, b)
+      if type(a) == type(b) then
+        if type(a) == "number" then return a < b end
+        return tostring(a) < tostring(b)
+      end
+      return type(a) == "number"
+    end)
+    for _, k in ipairs(sorted_keys) do
+      local childPath = path .. "." .. tostring(k)
+      local _, childLines = draw_tree_node(p, childPath, k, value[k], indent + 1, y + drawnLines * lineH, contentX, contentW)
+      drawnLines = drawnLines + childLines
+    end
+  end
+
+  return y + lineH, drawnLines
+end
+
+-- Helper: Check if a global is pinned
+local function is_global_pinned(name)
+  for _, p in ipairs(state.inspector.pinnedGlobals or {}) do
+    if p == name then return true end
+  end
+  return false
+end
+
+-- Helper: Draw a single inspector row with pin button
+local function draw_inspector_row(p, item, y, contentX, contentW, lineH, fontH)
+  local isPinned = is_global_pinned(item.key)
+  local pinW = 14
+
+  -- Draw pin button
+  local pinX = contentX
+  if isPinned then
+    love.graphics.setColor(ui.color.accent)
+    love.graphics.print("*", pinX, y)
+  else
+    love.graphics.setColor(ui.color.textDim)
+    love.graphics.print("o", pinX, y)
+  end
+
+  -- Register pin button hit region
+  ui._inspectorPinRects[item.key] = {
+    x = pinX, y = y, w = pinW, h = lineH,
+    globalName = item.key, isPinned = isPinned
+  }
+
+  -- Draw the tree node (offset by pin button width)
+  local path = "script." .. tostring(item.key)
+  local _, lines = draw_tree_node(p, path, item.key, item.value, 0, y, contentX + pinW + 2, contentW - pinW - 2)
+
+  return lines
+end
+
+local function draw_inspector_content(p)
+  local fontH = love.graphics.getFont() and love.graphics.getFont():getHeight() or 14
+  local lineH = fontH + 4
+  local headerH = state.fonts.uiHeader and state.fonts.uiHeader:getHeight() or fontH
+
+  -- Clear previous hit regions
+  ui._inspectorRects = {}
+  ui._inspectorPinRects = {}
+  ui._inspectorValueRects = {}
+
+  local contentX = p.x + 8
+  local contentW = p.w - 16
+  local y = p.y + NAV_H + 8 - (state.inspector.scrollOffset * lineH)
+
+  -- Draw hide-functions toggle button in top right
+  local btnW = 24
+  local btnH = 16
+  local btnX = p.x + p.w - btnW - 8
+  local btnY = p.y + NAV_H + 4
+  local hideFn = state.inspector.hideFunctions
+  if hideFn then
+    love.graphics.setColor(ui.color.panel)
+  else
+    love.graphics.setColor(ui.color.accent[1], ui.color.accent[2], ui.color.accent[3], 0.3)
+  end
+  love.graphics.rectangle("fill", btnX, btnY, btnW, btnH, 3)
+  if hideFn then
+    love.graphics.setColor(ui.color.textDim)
+  else
+    love.graphics.setColor(ui.color.accent)
+  end
+  love.graphics.print("fn", btnX + 4, btnY + 1)
+  ui._navRects["inspector_hide_fn"] = {
+    x = btnX, y = btnY, w = btnW, h = btnH,
+    action = "toggle_hide_functions"
+  }
+
+  -- Gather script globals with origin info
+  local pinned = {}
+  local mainGlobals = {}
+  local moduleGlobals = {} -- { [modname] = { items } }
+
+  if sandbox.env then
+    for k, v in pairs(sandbox.env) do
+      if not inspector_builtin_globals[k] then
+        -- Apply hideFunctions filter
+        if state.inspector.hideFunctions and type(v) == "function" then
+          -- Skip functions
+        else
+          local origin = sandbox.globalOrigins and sandbox.globalOrigins[k] or "main"
+          local item = { key = k, value = v, origin = origin }
+
+          if is_global_pinned(k) then
+            table.insert(pinned, item)
+          elseif origin == "main" then
+            table.insert(mainGlobals, item)
+          else
+            moduleGlobals[origin] = moduleGlobals[origin] or {}
+            table.insert(moduleGlobals[origin], item)
+          end
+        end
+      end
+    end
+  end
+
+  -- Sort each group
+  local function sortItems(items)
+    table.sort(items, function(a, b) return tostring(a.key) < tostring(b.key) end)
+  end
+  sortItems(pinned)
+  sortItems(mainGlobals)
+  for _, items in pairs(moduleGlobals) do
+    sortItems(items)
+  end
+
+  -- Section: Pinned (if any)
+  if #pinned > 0 then
+    if y + headerH > p.y + NAV_H then
+      draw_section_header(contentX, y, "Pinned")
+    end
+    y = y + headerH + 8
+    for _, item in ipairs(pinned) do
+      local lines = draw_inspector_row(p, item, y, contentX, contentW, lineH, fontH)
+      y = y + lines * lineH
+    end
+    y = y + 8
+    draw_section_separator(p.x, y, p.w)
+    y = y + 12
+  end
+
+  -- Section: Script Globals (main script only)
+  if y + headerH > p.y + NAV_H then
+    draw_section_header(contentX, y, "Script Globals")
+  end
+  y = y + headerH + 8
+
+  if #mainGlobals == 0 and not next(moduleGlobals) and #pinned == 0 then
+    love.graphics.setColor(ui.color.textDim)
+    love.graphics.print("(no globals)", contentX + 8, y)
+    y = y + lineH
+  else
+    for _, item in ipairs(mainGlobals) do
+      local lines = draw_inspector_row(p, item, y, contentX, contentW, lineH, fontH)
+      y = y + lines * lineH
+    end
+  end
+
+  -- Section: Module globals (grouped by require path)
+  if state.inspector.groupByOrigin and next(moduleGlobals) then
+    local sortedModules = {}
+    for modname in pairs(moduleGlobals) do
+      table.insert(sortedModules, modname)
+    end
+    table.sort(sortedModules)
+
+    for _, modname in ipairs(sortedModules) do
+      local items = moduleGlobals[modname]
+      if #items > 0 then
+        y = y + 8
+        draw_section_separator(p.x, y, p.w)
+        y = y + 12
+        if y + headerH > p.y + NAV_H then
+          draw_section_header(contentX, y, "require('" .. modname .. "')")
+        end
+        y = y + headerH + 8
+        for _, item in ipairs(items) do
+          local lines = draw_inspector_row(p, item, y, contentX, contentW, lineH, fontH)
+          y = y + lines * lineH
+        end
+      end
+    end
+  end
+
+  -- Section: Simulator (if present)
+  if sandbox.sim then
+    y = y + 12
+    draw_section_separator(p.x, y, p.w)
+    y = y + 12
+
+    if y + headerH > p.y + NAV_H then
+      draw_section_header(contentX, y, "Simulator")
+    end
+    y = y + headerH + 8
+
+    -- Show simulator config if available
+    if sandbox.sim.cfg then
+      local _, lines = draw_tree_node(p, "sim.cfg", "cfg", sandbox.sim.cfg, 0, y, contentX, contentW)
+      y = y + lines * lineH
+    end
+
+    -- Show simulator hooks info
+    if sandbox.sim.hooks then
+      local hooks = {}
+      for hookName, fn in pairs(sandbox.sim.hooks) do
+        if type(fn) == "function" then
+          table.insert(hooks, hookName)
+        end
+      end
+      if #hooks > 0 then
+        table.sort(hooks)
+        love.graphics.setColor(ui.color.textDim)
+        love.graphics.print("hooks: " .. table.concat(hooks, ", "), contentX + 8, y)
+        y = y + lineH
+      end
+    end
+  end
+
+  -- Store total content height for scroll bounds
+  ui._inspectorContentHeight = y - (p.y + NAV_H + 8 - (state.inspector.scrollOffset * lineH))
+end
+
 function ui.layout(w, h)
   ui.panels.toolbar = { x = 12, y = 12, w = w - 24, h = 28 }
 
@@ -774,6 +1214,21 @@ function ui.layout(w, h)
     -- Always align outputs to right edge (both expanded and minimized)
     local outputsX = w - 12 - rightW
     ui.panels.io_outputs = { x = outputsX, y = midTop, w = rightW, h = midH }
+  end
+
+  -- Debug logging
+  if state.debugOverlayEnabled then
+    print(string.format(
+      "[UI Layout] Window: %dx%d | Game: %dx%d @ %.1fx | Debug: %s | Minimized: I=%s G=%s O=%s D=%s L=%s",
+      w, h,
+      state.gameCanvasW or 0, state.gameCanvasH or 0, state.gameCanvasScale or 1,
+      state.debugCanvasEnabled and "ON" or "OFF",
+      ui.minimized.inputs and "Y" or "N",
+      ui.minimized.game and "Y" or "N",
+      ui.minimized.outputs and "Y" or "N",
+      ui.minimized.debug and "Y" or "N",
+      ui.minimized.log and "Y" or "N"
+    ))
   end
 end
 
@@ -907,6 +1362,8 @@ function ui.draw_inputs()
 
   if ui.mergedOutputs and ui.leftTab == "outputs" then
     draw_outputs_content(p)
+  elseif ui.mergedOutputs and ui.leftTab == "inspector" then
+    draw_inspector_content(p)
   else
     draw_inputs_content(p)
   end
@@ -927,7 +1384,11 @@ function ui.draw_outputs()
   draw_panel(p)
   draw_nav_bar(p, "Outputs", "outputs")
   panel_content_scissor(p)
-  draw_outputs_content(p)
+  if ui.rightTab == "inspector" then
+    draw_inspector_content(p)
+  else
+    draw_outputs_content(p)
+  end
   love.graphics.setScissor()
 end
 
@@ -1346,6 +1807,9 @@ function ui.mousepressed(mx, my, button)
         elseif r.action == "left_tab" and r.tab then
           ui.leftTab = r.tab
           return
+        elseif r.action == "right_tab" and r.tab then
+          ui.rightTab = r.tab
+          return
         elseif r.action == "io_tab" and r.which and r.tab then
           if r.which == "input" then
             state.ioTabs.activeInputTab = r.tab
@@ -1374,7 +1838,78 @@ function ui.mousepressed(mx, my, button)
         elseif r.action == "toggle_system_logs" then
           state.logUI.collapsedSources.system = not (state.logUI.collapsedSources.system or false)
           return
+        elseif r.action == "toggle_hide_functions" then
+          state.inspector.hideFunctions = not state.inspector.hideFunctions
+          return
         end
+      end
+    end
+  end
+  -- Inspector value double-click to edit
+  if ui._inspectorValueRects then
+    for path, r in pairs(ui._inspectorValueRects) do
+      if r and (mx >= r.x and my >= r.y and mx <= r.x + r.w and my <= r.y + r.h) then
+        local now = love.timer.getTime()
+        local isDoubleClick = (now - ui._inspectorEdit.lastClickTime < 0.3 and ui._inspectorEdit.lastClickPath == path)
+        ui._inspectorEdit.lastClickTime = now
+        ui._inspectorEdit.lastClickPath = path
+
+        if isDoubleClick then
+          -- Extract global key from path (script.myVar -> myVar)
+          local globalKey = path:match("^script%.([^%.]+)$")
+          if globalKey and sandbox.env and sandbox.env[globalKey] then
+            local value = sandbox.env[globalKey]
+            local valueType = type(value)
+            -- Initialize edit mode
+            ui._inspectorEdit.active = true
+            ui._inspectorEdit.path = path
+            ui._inspectorEdit.globalKey = globalKey
+            ui._inspectorEdit.valueType = valueType
+            if valueType == "string" then
+              ui._inspectorEdit.text = value
+            elseif valueType == "number" then
+              ui._inspectorEdit.text = tostring(value)
+            elseif valueType == "boolean" then
+              ui._inspectorEdit.text = tostring(value)
+            end
+          end
+          return
+        end
+      end
+    end
+  end
+  -- Inspector tree node expand/collapse
+  if ui._inspectorRects then
+    for path, r in pairs(ui._inspectorRects) do
+      if r and (mx >= r.x and my >= r.y and mx <= r.x + r.w and my <= r.y + r.h) then
+        if r.action == "toggle_expand" and r.path then
+          state.inspector.expanded[r.path] = not state.inspector.expanded[r.path]
+          return
+        end
+      end
+    end
+  end
+  -- Inspector pin toggle
+  if ui._inspectorPinRects then
+    for globalName, r in pairs(ui._inspectorPinRects) do
+      if r and (mx >= r.x and my >= r.y and mx <= r.x + r.w and my <= r.y + r.h) then
+        -- Toggle pin state
+        if r.isPinned then
+          -- Remove from pinned
+          local newPinned = {}
+          for _, p in ipairs(state.inspector.pinnedGlobals or {}) do
+            if p ~= globalName then
+              table.insert(newPinned, p)
+            end
+          end
+          state.inspector.pinnedGlobals = newPinned
+        else
+          -- Add to pinned
+          state.inspector.pinnedGlobals = state.inspector.pinnedGlobals or {}
+          table.insert(state.inspector.pinnedGlobals, globalName)
+        end
+        ui._inspectorPinsChanged = true
+        return
       end
     end
   end
@@ -1503,6 +2038,30 @@ function ui.wheelmoved(dx, dy)
       state.logUI.scrollOffset = math.min(maxScroll, state.logUI.scrollOffset)
     end
     return
+  end
+
+  -- Check if scrolling over inspector panel (merged mode: left panel with inspector tab, non-merged: right panel with inspector tab)
+  local inspectorPanel = nil
+  if ui.mergedOutputs and ui.leftTab == "inspector" then
+    inspectorPanel = ui.panels.io_inputs
+  elseif not ui.mergedOutputs and ui.rightTab == "inspector" then
+    inspectorPanel = ui.panels.io_outputs
+  end
+  if inspectorPanel and not ui.minimized.inputs and not ui.minimized.outputs then
+    local ip = inspectorPanel
+    if mx >= ip.x and my >= ip.y and mx < ip.x + ip.w and my < ip.y + ip.h then
+      -- Scroll inspector content
+      state.inspector.scrollOffset = state.inspector.scrollOffset - dy
+      -- Clamp to valid range
+      local font = love.graphics.getFont()
+      local fontH = font and font:getHeight() or 14
+      local lineH = fontH + 4
+      local visibleH = ip.h - NAV_H
+      local visibleLines = math.floor(visibleH / lineH)
+      local maxLines = math.max(0, math.floor((ui._inspectorContentHeight or 0) / lineH) - visibleLines + 2)
+      state.inspector.scrollOffset = math.max(0, math.min(maxLines, state.inspector.scrollOffset))
+      return
+    end
   end
 
   -- Number slider scrolling
@@ -1669,6 +2228,92 @@ function ui.draw_export_toast()
   love.graphics.rectangle("fill", x, y, tw + 32, 32, 6, 6)
   love.graphics.setColor(1, 1, 1, alpha)
   love.graphics.print(text, x + 16, y + 8)
+end
+
+---@brief Draw debug overlay showing panel boundaries and hit areas
+function ui.draw_debug_overlay()
+  if not state.debugOverlayEnabled then return end
+
+  love.graphics.setLineWidth(1)
+
+  -- 1. Draw panel boundaries
+  for name, panel in pairs(ui.panels) do
+    if panel.w > 0 and panel.h > 0 then
+      love.graphics.setColor(1, 0, 0, 0.4)  -- Red with transparency
+      love.graphics.rectangle("line", panel.x, panel.y, panel.w, panel.h)
+
+      love.graphics.setColor(1, 1, 1, 0.9)
+      love.graphics.print(
+        string.format("%s: %d,%d %dx%d", name, panel.x, panel.y, panel.w, panel.h),
+        panel.x + 4, panel.y + 4
+      )
+    end
+  end
+
+  -- 2. Draw canvas hit rectangles
+  for which, rect in pairs(ui._canvasRects) do
+    if rect then
+      love.graphics.setColor(0, 1, 0, 0.4)  -- Green
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+      love.graphics.setColor(1, 1, 1, 0.9)
+      love.graphics.print(
+        string.format("%s canvas: scale=%.1fx", which, rect.scale),
+        rect.x + 4, rect.y + rect.h - 20
+      )
+    end
+  end
+
+  -- 3. Draw boolean input hit areas
+  for i, rect in pairs(ui._boolRects) do
+    if rect then
+      love.graphics.setColor(0, 0.5, 1, 0.3)  -- Blue
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+    end
+  end
+
+  -- 4. Draw number input hit areas (sliders)
+  for i, rect in pairs(ui._numRects) do
+    if rect then
+      love.graphics.setColor(1, 1, 0, 0.3)  -- Yellow
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+    end
+  end
+
+  -- 5. Draw navigation bar hit areas
+  for key, rect in pairs(ui._navRects) do
+    if rect then
+      love.graphics.setColor(1, 0, 1, 0.3)  -- Magenta
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+    end
+  end
+
+  -- 6. Draw toolbar button hit areas
+  for key, rect in pairs(ui._toolbarRects) do
+    if rect then
+      love.graphics.setColor(0, 1, 1, 0.3)  -- Cyan
+      love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h)
+    end
+  end
+
+  -- 7. Draw legend in top-right corner
+  local legendX = love.graphics.getWidth() - 220
+  local legendY = 40
+  love.graphics.setColor(0, 0, 0, 0.7)
+  love.graphics.rectangle("fill", legendX - 4, legendY - 4, 216, 120)
+
+  local function legendItem(text, color, y)
+    love.graphics.setColor(color[1], color[2], color[3], 0.8)
+    love.graphics.rectangle("fill", legendX, y, 16, 16)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.print(text, legendX + 20, y + 2)
+  end
+
+  legendItem("Panels", {1, 0, 0}, legendY)
+  legendItem("Canvas rects", {0, 1, 0}, legendY + 18)
+  legendItem("Bool inputs", {0, 0.5, 1}, legendY + 36)
+  legendItem("Number inputs", {1, 1, 0}, legendY + 54)
+  legendItem("Nav bars", {1, 0, 1}, legendY + 72)
+  legendItem("Toolbar", {0, 1, 1}, legendY + 90)
 end
 
 return ui

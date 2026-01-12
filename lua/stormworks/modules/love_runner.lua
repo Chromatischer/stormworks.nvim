@@ -51,6 +51,22 @@ local function build_args(opts)
   if opts.props then table.insert(args, "--props"); table.insert(args, opts.props) end
   if opts.log_file then table.insert(args, "--log-file"); table.insert(args, tostring(opts.log_file)) end
   if opts.log_truncate then table.insert(args, "--log-truncate") end
+  -- Inspector config
+  if opts.inspector then
+    local insp = opts.inspector
+    if insp.hideFunctions ~= nil then
+      table.insert(args, "--inspector-hide-functions")
+      table.insert(args, insp.hideFunctions and "true" or "false")
+    end
+    if insp.groupByOrigin ~= nil then
+      table.insert(args, "--inspector-group-by-origin")
+      table.insert(args, insp.groupByOrigin and "true" or "false")
+    end
+    if insp.pinnedGlobals and #insp.pinnedGlobals > 0 then
+      table.insert(args, "--inspector-pinned")
+      table.insert(args, table.concat(insp.pinnedGlobals, ","))
+    end
+  end
   return args
 end
 
@@ -133,8 +149,14 @@ function M.run_current_script(opts)
     libs = uniq
   end
 
+  -- Read inspector config from .microproject if available
+  local inspector_config = nil
+  if config.current_project and config.current_project.config and config.current_project.config.inspector then
+    inspector_config = config.current_project.config.inspector
+  end
+
   local cli = { love_bin, love_root }
-  local extra = build_args(vim.tbl_extend("force", { script = script_path, libs = libs }, opts))
+  local extra = build_args(vim.tbl_extend("force", { script = script_path, libs = libs, inspector = inspector_config }, opts))
   for _,a in ipairs(extra) do table.insert(cli, a) end
 
   -- Spawn detached job

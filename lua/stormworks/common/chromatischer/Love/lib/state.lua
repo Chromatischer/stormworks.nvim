@@ -21,6 +21,9 @@ local state = {
   debugCanvasH = 512,
   debugCanvasScale = 1,
 
+  -- UI layer debugging (for development)
+  debugOverlayEnabled = false,
+
   -- Pointer/touch state for canvases (updated by UI events)
   touch = {
     game = { x = 0, y = 0, left = false, right = false, inside = false },
@@ -70,6 +73,7 @@ local state = {
     tick = false,
     scale = false,
     debugCanvas = false,
+    debugOverlay = false,
   },
 
   -- Export feature state
@@ -103,6 +107,15 @@ local state = {
   simulatorDriven = {
     inputB = {},  -- [1..32] = true if simulator controls
     inputN = {},  -- [1..32] = true if simulator controls
+  },
+
+  -- Inspector panel state
+  inspector = {
+    expanded = {},      -- { ["path.to.key"] = true/false }
+    scrollOffset = 0,   -- vertical scroll position (lines from top)
+    hideFunctions = true,   -- hide function-type globals by default
+    pinnedGlobals = {},     -- {"globalName1", ...} - pinned to top
+    groupByOrigin = true,   -- group globals by require() source
   },
 }
 

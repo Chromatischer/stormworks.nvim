@@ -1,0 +1,4 @@
+return {
+  is_microcontroller = true,
+  libraries = {},
+}
