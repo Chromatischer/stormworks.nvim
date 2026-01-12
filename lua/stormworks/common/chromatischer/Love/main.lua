@@ -439,7 +439,7 @@ local function persist_inspector_pins()
   -- Write back
   local out = io.open(config_path, "w")
   if not out then return false, "cannot write to " .. config_path end
-  out:write("return " .. serialize_lua_value(cfg, 0) .. "\n")
+  out:write("return " .. serialize_lua_value(cfg, 0, {}) .. "\n")
   out:close()
   logger.append("[info] Saved pinned globals to " .. config_path)
   return true
