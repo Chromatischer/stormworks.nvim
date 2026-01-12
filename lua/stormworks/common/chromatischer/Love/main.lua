@@ -357,8 +357,9 @@ local pin_persist_state = {
   debounceDelay = 1.0, -- seconds
 }
 
-local function serialize_lua_value(v, indent)
+local function serialize_lua_value(v, indent, visited)
   indent = indent or 0
+  visited = visited or {}
   local t = type(v)
   if t == "string" then
     return string.format("%q", v)
@@ -367,13 +368,19 @@ local function serialize_lua_value(v, indent)
   elseif t == "nil" then
     return "nil"
   elseif t == "table" then
+    -- Check for cyclic reference
+    if visited[v] then
+      return "{--[[cyclic reference]]}"
+    end
+    visited[v] = true
+    
     local parts = {}
     local count = 0
     for _ in pairs(v) do count = count + 1 end
     if count == #v and count > 0 then
       -- Array-style
       for _, val in ipairs(v) do
-        table.insert(parts, serialize_lua_value(val, indent + 1))
+        table.insert(parts, serialize_lua_value(val, indent + 1, visited))
       end
       return "{ " .. table.concat(parts, ", ") .. " }"
     else
@@ -387,9 +394,9 @@ local function serialize_lua_value(v, indent)
         if type(k) == "string" and k:match("^[%a_][%w_]*$") then
           key_str = k
         else
-          key_str = "[" .. serialize_lua_value(k, 0) .. "]"
+          key_str = "[" .. serialize_lua_value(k, 0, visited) .. "]"
         end
-        table.insert(parts, ws .. key_str .. " = " .. serialize_lua_value(v[k], indent + 1))
+        table.insert(parts, ws .. key_str .. " = " .. serialize_lua_value(v[k], indent + 1, visited))
       end
       local close_ws = string.rep("  ", indent)
       return "{\n" .. table.concat(parts, ",\n") .. "\n" .. close_ws .. "}"
@@ -432,7 +439,7 @@ local function persist_inspector_pins()
   -- Write back
   local out = io.open(config_path, "w")
   if not out then return false, "cannot write to " .. config_path end
-  out:write("return " .. serialize_lua_value(cfg, 0) .. "\n")
+  out:write("return " .. serialize_lua_value(cfg, 0, {}) .. "\n")
   out:close()
   logger.append("[info] Saved pinned globals to " .. config_path)
   return true
