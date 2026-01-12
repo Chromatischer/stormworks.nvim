@@ -415,14 +415,123 @@ local function find_microproject_path()
   return nil
 end
 
+-- Safe loader for .microproject files in a sandboxed environment
+local function safe_load_microproject(config_path)
+  local f, err = io.open(config_path, "r")
+  if not f then return nil, "cannot read " .. config_path .. ": " .. tostring(err) end
+  local content = f:read("*a")
+  f:close()
+  
+  -- Create a sandboxed environment without dangerous globals
+  local sandbox = {
+    -- Safe basic functions
+    tonumber = tonumber,
+    tostring = tostring,
+    type = type,
+    pairs = pairs,
+    ipairs = ipairs,
+    next = next,
+    select = select,
+    unpack = unpack or table.unpack,
+    -- Safe standard libraries
+    string = string,
+    table = table,
+    math = math,
+    -- Explicitly exclude dangerous functions:
+    -- os = nil (no system access)
+    -- io = nil (no file access)
+    -- dofile = nil (no code execution)
+    -- loadfile = nil (no code execution)
+    -- require = nil (no module loading)
+    -- debug = nil (no debug library)
+    -- package = nil (no package manipulation)
+  }
+  sandbox._G = sandbox
+  
+  -- Load the code in the sandboxed environment
+  local chunk, load_err
+  if setfenv then
+    -- Lua 5.1
+    chunk, load_err = loadstring(content, config_path)
+    if chunk then
+      setfenv(chunk, sandbox)
+    end
+  else
+    -- Lua 5.2+
+    chunk, load_err = load(content, config_path, "t", sandbox)
+  end
+  
+  if not chunk then
+    return nil, "syntax error in " .. config_path .. ": " .. tostring(load_err)
+  end
+  
+  -- Execute in sandbox
+  local ok, result = pcall(chunk)
+  if not ok then
+    return nil, "execution error in " .. config_path .. ": " .. tostring(result)
+  end
+  
+  return result
+end
+
+-- Validate and sanitize loaded config data
+local function validate_microproject_config(cfg)
+  if type(cfg) ~= "table" then
+    return {}
+  end
+  
+  -- Create a clean config with only whitelisted fields
+  local clean = {}
+  
+  -- Whitelist: is_microcontroller (boolean)
+  if type(cfg.is_microcontroller) == "boolean" then
+    clean.is_microcontroller = cfg.is_microcontroller
+  end
+  
+  -- Whitelist: libraries (array of strings)
+  if type(cfg.libraries) == "table" then
+    clean.libraries = {}
+    for i, v in ipairs(cfg.libraries) do
+      if type(v) == "string" then
+        clean.libraries[i] = v
+      end
+    end
+  end
+  
+  -- Whitelist: inspector settings (nested table)
+  if type(cfg.inspector) == "table" then
+    clean.inspector = {}
+    
+    -- Whitelist: inspector.pinnedGlobals (array of strings)
+    if type(cfg.inspector.pinnedGlobals) == "table" then
+      clean.inspector.pinnedGlobals = {}
+      for i, v in ipairs(cfg.inspector.pinnedGlobals) do
+        if type(v) == "string" then
+          clean.inspector.pinnedGlobals[i] = v
+        end
+      end
+    end
+  end
+  
+  return clean
+end
+
 local function persist_inspector_pins()
   local config_path = find_microproject_path()
   if not config_path then return false, "no .microproject found" end
 
-  -- Read existing config
-  local ok, cfg = pcall(dofile, config_path)
-  if not ok or type(cfg) ~= "table" then
+  -- Read existing config using safe loader
+  local raw_cfg, err = safe_load_microproject(config_path)
+  local cfg
+  if raw_cfg then
+    -- Validate and sanitize the loaded config
+    cfg = validate_microproject_config(raw_cfg)
+  else
+    -- If loading fails, start with empty config and log the error
     cfg = {}
+    if err then
+      logger.append("[warning] Failed to load " .. config_path .. ": " .. err)
+    end
   end
 
   -- Update inspector section
