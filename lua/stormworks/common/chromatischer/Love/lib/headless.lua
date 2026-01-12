@@ -238,7 +238,7 @@ function M.run(state, sandbox, canvases, config)
 
   -- Enable debug canvas if capturing it
   if config.capture == "debug" or config.capture == "both" then
-    state.debugCanvasEnabled = true
+    state.userDebugCanvasEnabled = true
   end
 
   -- Create canvases

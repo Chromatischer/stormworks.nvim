@@ -24,7 +24,7 @@ end
 
 function canvases.recreateAll()
   createGameCanvas()
-  if state.debugCanvasEnabled then
+  if state.userDebugCanvasEnabled then
     createDebugCanvas()
   else
     canvases.debug = nil
@@ -33,7 +33,7 @@ end
 
 function canvases.ensure()
   if not canvases.game then createGameCanvas() end
-  if state.debugCanvasEnabled and not canvases.debug then createDebugCanvas() end
+  if state.userDebugCanvasEnabled and not canvases.debug then createDebugCanvas() end
 end
 
 -- Drawing API mapping
