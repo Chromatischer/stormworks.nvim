@@ -191,8 +191,9 @@ for _, test in ipairs(test_scripts) do
   print(string.format("  Minified:  %4d chars", size))
   print(string.format("  Reduction: %5.1f%%", reduction))
 
-  -- Validate Lua syntax
-  local fn, err = load(result)
+  -- Validate Lua syntax (use loadstring for Lua 5.1 compatibility)
+  local load_fn = loadstring or load
+  local fn, err = load_fn(result)
   if fn then
     print("  Syntax:    VALID")
   else

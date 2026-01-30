@@ -36,8 +36,9 @@ end
 
 -- Check if string is valid Lua syntax
 function TestUtils.is_valid_lua(code)
-  -- Use load which works in Lua 5.2+ (loadstring was deprecated)
-  local fn, err = load(code)
+  -- Use loadstring for Lua 5.1, load for 5.2+
+  local load_fn = loadstring or load
+  local fn, err = load_fn(code)
   return fn ~= nil, err
 end
 
