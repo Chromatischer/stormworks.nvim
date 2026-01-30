@@ -39,9 +39,12 @@ LifeBoatAPI.Tools.VariableRenamer = {
 
     if self.variableNumber <= size then -- 53 most commonly variable names will become 1 letter each
       return self._replacementCharacters:sub(self.variableNumber, self.variableNumber)
-    elseif self.variableNumber <= (size * size) then
-      local num1 = math.floor(self.variableNumber % size) + 1
-      local num2 = math.floor(self.variableNumber / size) + 1
+    elseif self.variableNumber <= size + (size * size) then
+      -- Two-character names: __, _a, _b, ..., _Z, a_, aa, ab, ..., ZZ
+      -- Use 0-based index for correct calculation
+      local index = self.variableNumber - size - 1
+      local num1 = (index % size) + 1
+      local num2 = math.floor(index / size) + 1
       return self._replacementCharacters:sub(num2, num2) .. self._replacementCharacters:sub(num1, num1)
     end
     return "L" .. tostring(self.variableNumber)

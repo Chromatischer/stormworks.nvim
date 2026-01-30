@@ -31,6 +31,7 @@ TOTAL_CHAR_LIMIT = 8100 -- Giving some wiggle room just like nameouschangey says
 ---@field skipCombinedFileOutput  boolean if true, doesn't output the combined file - to speed up the build process
 ---@field stripOnDebugDraw      boolean if true, removes any user-defined onDebugDraw() function from compiled output
 ---@field stripOnAttatch      boolean if true, removes any user-defined onAttatch() function from compiled output
+---@field foldConstants         boolean if true, folds simple constant expressions like 1+2 -> 3
 
 ---@class Minimizer : BaseClass
 ---@field constants ParsingConstantsLoader list of external, global keywords
@@ -58,6 +59,7 @@ LifeBoatAPI.Tools.Minimizer = {
     this.params.skipCombinedFileOutput = LifeBoatAPI.Tools.DefaultBool(this.params.skipCombinedFileOutput, false)
     this.params.stripOnDebugDraw = LifeBoatAPI.Tools.DefaultBool(this.params.stripOnDebugDraw, true)
     this.params.stripOnAttatch = LifeBoatAPI.Tools.DefaultBool(this.params.stripOnAttatch, true)
+    this.params.foldConstants = LifeBoatAPI.Tools.DefaultBool(this.params.foldConstants, true)
 
     return this
   end,
@@ -114,9 +116,9 @@ LifeBoatAPI.Tools.Minimizer = {
       text = this:_stripFunctionByName(text, "onAttatch")
     end
 
-    -- strip user onAttatch() implementations entirely if requested
-    if this.params.stripOnDebugDraw then
-      text = this:_stripFunctionByName(text, "onAttatch")
+    -- fold simple constant expressions (e.g., 1+2 -> 3, 10*5 -> 50)
+    if this.params.foldConstants then
+      text = this:_foldConstants(text)
     end
 
     -- rename variables so everything is consistent (if creating new globals happens, it's important they have unique names)
@@ -323,6 +325,100 @@ LifeBoatAPI.Tools.Minimizer = {
       text = text:sub(1, s1 - 1) .. text:sub(endpos)
       i = s1
     end
+    return text
+  end,
+
+  --- Fold simple constant expressions like 1+2 -> 3, 10*5 -> 50
+  --- Only folds integer arithmetic to avoid floating point precision issues
+  ---@param this Minimizer
+  ---@param text string
+  ---@return string
+  _foldConstants = function(this, text)
+    local changed = true
+    local maxIterations = 10  -- prevent infinite loops
+    local iterations = 0
+
+    while changed and iterations < maxIterations do
+      changed = false
+      iterations = iterations + 1
+
+      -- Fold parenthesized simple numbers: (123) -> 123
+      local newText = text:gsub("%((%d+)%)", "%1")
+      if newText ~= text then
+        text = newText
+        changed = true
+      end
+
+      -- Fold addition: number + number (with word boundaries)
+      newText = text:gsub("([^%w_])(%d+)%s*%+%s*(%d+)([^%w_])", function(pre, a, b, post)
+        local result = tonumber(a) + tonumber(b)
+        if result == math.floor(result) and result >= 0 and result <= 2147483647 then
+          return pre .. tostring(math.floor(result)) .. post
+        end
+        return pre .. a .. "+" .. b .. post
+      end)
+      if newText ~= text then
+        text = newText
+        changed = true
+      end
+
+      -- Fold subtraction: number - number (careful with negative results)
+      newText = text:gsub("([^%w_])(%d+)%s*%-%s*(%d+)([^%w_])", function(pre, a, b, post)
+        local result = tonumber(a) - tonumber(b)
+        if result == math.floor(result) and result >= 0 and result <= 2147483647 then
+          return pre .. tostring(math.floor(result)) .. post
+        end
+        return pre .. a .. "-" .. b .. post
+      end)
+      if newText ~= text then
+        text = newText
+        changed = true
+      end
+
+      -- Fold multiplication: number * number
+      newText = text:gsub("([^%w_])(%d+)%s*%*%s*(%d+)([^%w_])", function(pre, a, b, post)
+        local result = tonumber(a) * tonumber(b)
+        if result == math.floor(result) and result >= 0 and result <= 2147483647 then
+          return pre .. tostring(math.floor(result)) .. post
+        end
+        return pre .. a .. "*" .. b .. post
+      end)
+      if newText ~= text then
+        text = newText
+        changed = true
+      end
+
+      -- Fold division: number / number (only if result is integer)
+      newText = text:gsub("([^%w_])(%d+)%s*/%s*(%d+)([^%w_])", function(pre, a, b, post)
+        local numB = tonumber(b)
+        if numB ~= 0 then
+          local result = tonumber(a) / numB
+          if result == math.floor(result) and result >= 0 and result <= 2147483647 then
+            return pre .. tostring(math.floor(result)) .. post
+          end
+        end
+        return pre .. a .. "/" .. b .. post
+      end)
+      if newText ~= text then
+        text = newText
+        changed = true
+      end
+
+      -- Fold modulo: number % number
+      newText = text:gsub("([^%w_])(%d+)%s*%%s*(%d+)([^%w_])", function(pre, a, b, post)
+        local numB = tonumber(b)
+        if numB ~= 0 then
+          local result = tonumber(a) % numB
+          return pre .. tostring(math.floor(result)) .. post
+        end
+        return pre .. a .. "%" .. b .. post
+      end)
+      if newText ~= text then
+        text = newText
+        changed = true
+      end
+    end
+
     return text
   end,
 }

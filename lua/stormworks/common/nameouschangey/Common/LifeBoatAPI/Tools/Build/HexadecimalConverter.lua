@@ -31,8 +31,13 @@ LifeBoatAPI.Tools.HexadecimalConverter = {
     for i = 1, #hexValues do
       local hexVal = hexValues[i]
       local hexAsNum = tonumber(hexVal.captures[1])
+      local decimalStr = tostring(hexAsNum)
 
-      text = stringUtils.subAll(text, "([^%w_])" .. stringUtils.escape(hexVal.captures[1]), "%1" .. tostring(hexAsNum))
+      -- Only convert if decimal representation is shorter or equal length
+      -- This saves chars for large hex values like 0xFFFFFF -> 16777215 (8 chars both)
+      if #decimalStr <= #hexVal.captures[1] then
+        text = stringUtils.subAll(text, "([^%w_])" .. stringUtils.escape(hexVal.captures[1]), "%1" .. decimalStr)
+      end
     end
 
     return text
