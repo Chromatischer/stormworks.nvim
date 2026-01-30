@@ -30,6 +30,10 @@ LifeBoatAPI.Tools.NumberLiteralReducer = {
     text = this:_shortenType(text, LifeBoatAPI.Tools.StringUtils.find(text, "[^%w_](%d+%.?%d*[Ee]%-?%d*)")) --exponents
     text = this:_shortenType(text, LifeBoatAPI.Tools.StringUtils.find(text, "[^%w_](%d+%.?%d*)")) --all other numbers
 
+    -- Handle negative number literals (e.g., -100, -3.14) - must be preceded by operator or delimiter
+    -- Pattern matches: after =, (, [, {, ,, return, or start of expression
+    text = this:_shortenType(text, LifeBoatAPI.Tools.StringUtils.find(text, "[=%(,%[{]%s*(%-?%d+%.?%d*)"))
+
     -- numbers in the form 0.123 can be shortened to .123
     text = LifeBoatAPI.Tools.StringUtils.subAll(text, "([^%w_])0+(%.%d+)", "%1%2")
 
@@ -53,10 +57,16 @@ LifeBoatAPI.Tools.NumberLiteralReducer = {
     end
 
     -- filter out variables not seen enough times
-    --1.5 because we don't know if the variable will end up being 1 or 2 chars long, + 2 for = and \n
+    -- Break-even analysis: creating "n=100\n" (aliasCost) must save more than it costs
+    -- aliasCost = varNameLen + 1 (=) + numberLen + 1 (\n) = ~1.5 + 2 + numberLen
+    -- savingsPerUse = numberLen - varNameLen = numberLen - ~1.5
+    -- Need: count * savingsPerUse > aliasCost
     variables = LifeBoatAPI.Tools.TableUtils.iwhere(variables, function(v)
-      local timesNeedingSeen = 1.5 + 2 + #v.captures[1]
-      return 1.5 * count[v.captures[1]] >= timesNeedingSeen
+      local numberLen = #v.captures[1]
+      local avgVarNameLen = 1.5  -- could be 1 or 2 chars
+      local aliasCost = avgVarNameLen + 2 + numberLen  -- "n=100\n"
+      local savingsPerUse = numberLen - avgVarNameLen  -- "100" -> "n"
+      return count[v.captures[1]] * savingsPerUse > aliasCost
     end)
 
     -- due to the pattern, we need to alter each variable, so it's start position exclude the non-variable character
