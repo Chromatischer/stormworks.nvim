@@ -120,9 +120,12 @@ function M.run_current_script(opts)
   local lifeboat_dir = path_join(lua_dir, "common/nameouschangey/Common")
   local chroma_common = path_join(lua_dir, "common/chromatischer")
   local function add_dir_and_parent(dir)
-    if vim.fn.isdirectory(dir) == 1 then
-      table.insert(libs, dir)
-      local parent = vim.fn.fnamemodify(dir, ":h")
+    if not dir or dir == '' then return end
+    -- Normalize to absolute path first (same as build.lua)
+    local abs = vim.fn.fnamemodify(dir, ":p"):gsub("/$", "")
+    if vim.fn.isdirectory(abs) == 1 then
+      table.insert(libs, abs)
+      local parent = vim.fn.fnamemodify(abs, ":h")
       if vim.fn.isdirectory(parent) == 1 then table.insert(libs, parent) end
     end
   end
@@ -130,12 +133,12 @@ function M.run_current_script(opts)
   add_dir_and_parent(chroma_common)
   -- If project libraries are configured, include any directories there as well (and their parents)
   for _, p in ipairs(config.project_libs or {}) do
-    if vim.fn.isdirectory(p) == 1 then add_dir_and_parent(p) end
+    add_dir_and_parent(p)
   end
   -- If current_project has an explicit libraries list, include those and their parents
   if config.current_project and config.current_project.config and config.current_project.config.libraries then
     for _, p in ipairs(config.current_project.config.libraries) do
-      if vim.fn.isdirectory(p) == 1 then add_dir_and_parent(p) end
+      add_dir_and_parent(p)
     end
   end
   -- Deduplicate
