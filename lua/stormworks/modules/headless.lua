@@ -231,9 +231,7 @@ function M.export_sync(opts)
 
   -- Ensure absolute path for script
   local script_path = opts.script
-  if not script_path:match("^/") then
-    script_path = vim.fn.fnamemodify(script_path, ":p")
-  end
+  script_path = vim.fn.fnamemodify(script_path, ":p")
   opts.script = script_path
 
   -- Find Love binary
@@ -271,8 +269,8 @@ function M.export_sync(opts)
     return vim.fn.shellescape(arg)
   end, cli), " ") .. " > " .. vim.fn.shellescape(stdout_file) .. " 2> " .. vim.fn.shellescape(stderr_file)
   
-  local exit_code = vim.fn.system(cmd)
-  exit_code = vim.v.shell_error
+  vim.fn.system(cmd)
+  local exit_code = vim.v.shell_error
   
   -- Read stdout
   local stdout_lines = {}
@@ -359,7 +357,10 @@ function M.export(opts)
 
   -- Ensure absolute path for script
   local script_path = opts.script
-  if not script_path:match("^/") then
+  local is_absolute = script_path:match("^/")           -- Unix-like
+    or script_path:match("^%a:[/\\]")                   -- Windows drive letter (e.g., C:\ or D:/)
+    or script_path:match("^\\\\")                       -- Windows UNC path (e.g., \\server\share)
+  if not is_absolute then
     script_path = vim.fn.fnamemodify(script_path, ":p")
   end
   opts.script = script_path
