@@ -1,0 +1,25 @@
+{
+  "Section with all parameters": {
+    "prefix": ["@section", "section"],
+    "body": [
+      "---@section ${1|EXACT,PATTERN|} ${2:Identifier} ${3:count} ${4:SectionName}",
+      "${0:-- code to conditionally remove}",
+      "---@endsection ${4:SectionName}"
+    ],
+    "description": "Full section annotation with all parameters"
+  },
+  "Simple section": {
+    "prefix": ["@sec"],
+    "body": [
+      "---@section ${1:Identifier}",
+      "${0:-- code to conditionally remove}",
+      "---@endsection"
+    ],
+    "description": "Simple section annotation with identifier only"
+  },
+  "End section": {
+    "prefix": ["@endsection", "endsection"],
+    "body": "---@endsection ${1:SectionName}",
+    "description": "Section end annotation"
+  }
+}
