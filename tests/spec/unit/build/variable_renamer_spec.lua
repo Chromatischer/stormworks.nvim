@@ -82,21 +82,20 @@ describe("VariableRenamer", function()
       local constants = constants_class:new()
       local renamer = renamer_class:new(constants)
 
-      --TODO: See if there isn't a more efficent way to build the array and run the check
-      --FIXME: Takes an inordinate amount of time to run this check
-      
+
       local namesString = ""
       local repeatitionFound = false
+      local seen = {}
 
       for i = 1, 53^3-1, 1 do
         local shortName = renamer:getShortName()
 
-        if string.find(namesString, shortName)  then
+        if seen[namesshortName] == true then
           repeatitionFound = true
           break
         end
         
-        namesString = namesString .. shortName ..  ","
+        seen[shortName] = true
       end
       assert.is_false(repeatitionFound)
     end)
