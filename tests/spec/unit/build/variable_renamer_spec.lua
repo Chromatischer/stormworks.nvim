@@ -49,15 +49,56 @@ describe("VariableRenamer", function()
       local constants = constants_class:new()
       local renamer = renamer_class:new(constants)
 
-      -- Generate many names to exhaust single chars
+      -- Generate 53 names to exhaust single chars
       -- Single chars: _, a-z (26), A-Z (26) = 53 total
-      for i = 1, 54 do
+      for i = 1, 53 do
         renamer:getShortName()
       end
 
       -- Next name should be two characters
       local name = renamer:getShortName()
       assert.is_true(#name >= 2)
+    end)
+
+    it("should generate three-character names after exhausting single- and two-character names", function()
+      local constants = constants_class:new()
+      local renamer = renamer_class:new(constants)
+
+      
+
+      -- Generate 53*53-1 names to exhaust single- and two-character names
+      -- Single chars: _, a-z (26), A-Z (26) = 53 total
+      -- Two chars: 53*53-1 names
+      for i = 1, 53*53-1 do
+        renamer:getShortName()
+      end
+
+      -- Next name should be three characters
+      local name = renamer:getShortName()
+      assert.is_true(#name >= 3)
+    end)
+
+    it("should never output a repeated name", function()
+      local constants = constants_class:new()
+      local renamer = renamer_class:new(constants)
+
+      --TODO: See if there isn't a more efficent way to build the array and run the check
+      --FIXME: Takes an inordinate amount of time to run this check
+      
+      local namesString = ""
+      local repeatitionFound = false
+
+      for i = 1, 53^3-1, 1 do
+        local shortName = renamer:getShortName()
+
+        if string.find(namesString, shortName)  then
+          repeatitionFound = true
+          break
+        end
+        
+        namesString = namesString .. shortName ..  ","
+      end
+      assert.is_false(repeatitionFound)
     end)
   end)
 end)
