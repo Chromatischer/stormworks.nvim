@@ -21,7 +21,8 @@ LifeBoatAPI.Tools.VariableRenamer = {
     return self
   end,
 
-  --- Note, there is absolutely no reason to expect more than 2500 variables in a 4000 character file, hence 52*52 is fine
+  --- Note, after the update increasing the number of availible chars from 4096 to 8192 the resonably expected amount of variables has dramatically increased,
+  --- but should not excede the amount of valid names generated in the 53^3 possible combinations
   ---@param self VariableRenamer
   getShortName = function(self)
     local name = ""
@@ -37,15 +38,21 @@ LifeBoatAPI.Tools.VariableRenamer = {
     local size = #self._replacementCharacters
     self.variableNumber = self.variableNumber + 1
 
-    if self.variableNumber <= size then -- 53 most commonly variable names will become 1 letter each
+    if self.variableNumber <= size then
       return self._replacementCharacters:sub(self.variableNumber, self.variableNumber)
-    elseif self.variableNumber <= (size * size) then
+    elseif self.variableNumber <= (size * size - 1) then
       local num1 = math.floor(self.variableNumber % size) + 1
       local num2 = math.floor(self.variableNumber / size) + 1
       return self._replacementCharacters:sub(num2, num2) .. self._replacementCharacters:sub(num1, num1)
+    elseif self.variableNumber <= (size * size * size - 1) then
+      local num1 = math.floor(self.variableNumber % size) + 1
+      local num2 = math.floor(self.variableNumber / size % size) + 1
+      local num3 = math.floor(self.variableNumber / (size * size)) + 1
+      return self._replacementCharacters:sub(num3, num3) .. self._replacementCharacters:sub(num2, num2) .. self._replacementCharacters:sub(num1, num1)
     end
+
+    --if we have run out of unique 3 character names then:
     return "L" .. tostring(self.variableNumber)
   end,
 }
 LifeBoatAPI.Tools.Class(LifeBoatAPI.Tools.VariableRenamer)
-
