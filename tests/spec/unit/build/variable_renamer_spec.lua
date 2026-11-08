@@ -24,7 +24,8 @@ describe("VariableRenamer", function()
       for i = 1, 53^3-1, 1 do
         local shortName = renamer:_generateName()
 
-        if seen[namesshortName] == true then
+        if seen[shortName] == true then
+          print("Found repeated name: " .. i .. ": " .. shortName)
           repeatitionFound = true
         end
 
