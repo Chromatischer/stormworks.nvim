@@ -67,6 +67,7 @@ LifeBoatAPI.Tools.Minimizer = {
   ---@param this Minimizer
   ---@param inPath Filepath
   ---@return string minimized for use in any other purpose
+  ---@return integer newSize size without boilerplate
   minimizeFile = function(this, inPath, outPath, boilerplate)
     local text = LifeBoatAPI.Tools.FileSystemUtils.readAllText(inPath)
     local minimized, newsize = this:minimize(text, boilerplate)
