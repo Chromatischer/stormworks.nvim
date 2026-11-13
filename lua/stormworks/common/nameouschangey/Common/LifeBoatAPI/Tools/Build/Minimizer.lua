@@ -256,14 +256,20 @@ LifeBoatAPI.Tools.Minimizer = {
   end,
 
   --- Remove any function with the specified name ... end (and assignment forms) from the source text
-  --- This runs after strings/comments are stripped, so simple token scanning is safe
+  --- This runs after strings/comments are stripped, so simple token scanning is safe (note that this could fail due to `end`'s being misallocated')
   ---@param this Minimizer
   ---@param text string
   ---@param functionName string
   ---@return string
   _stripFunctionByName = function(this, text, functionName)
+
+    ---finds the next function signature
+    ---@param s string The input Text
+    ---@param idx any
+    ---@param funcName string
+    ---@return nil|integer ep, nil|integer sp
     local function find_next_signature(s, idx, funcName)
-      local candidates = {}
+      local candidates = {} --a table to hold the 
       local patternBase = "%f[%w_]" .. funcName .. "%s*%b()"
       local sp, ep
       sp, ep = s:find("%f[%w_]local%s+function%s+" .. patternBase, idx)
@@ -286,7 +292,7 @@ LifeBoatAPI.Tools.Minimizer = {
         return a.sp < b.sp
       end)
       if #candidates == 0 then
-        return nil
+        return nil, nil
       end
       return candidates[1].sp, candidates[1].ep
     end
@@ -295,20 +301,46 @@ LifeBoatAPI.Tools.Minimizer = {
       local depth = 0
       local i = after_sig + 1
       while true do
+        --find any functions
         local f1 = s:find("%f[%w_]function%f[^%w_]", i)
+
+        --find any if statements
+        local i1 = s:find("%f[%w_]if%f[^%w_]", i)
+
+        --find any do statements
+        local d1 = s:find("%f[%w_]do%f[^%w_]", i)
+
         local e1 = s:find("%f[%w_]end%f[^%w_]", i)
-        if not f1 and not e1 then
-          return #s + 1 -- nothing else; trim to end
+
+        --if there are no more ends and no more keywords then return end of file
+        if not f1 and not i1 and not d1 and not e1 then
+          return #s + 1
         end
-        if e1 and (not f1 or e1 < f1) then
-          if depth == 0 then
+
+        local isE1BeforeF1 = e1 and (e1 < (f1 or #s))
+        local isE1BeforeI1 = e1 and (e1 < (i1 or #s))
+        local isE1BeforeD1 = e1 and (e1 < (d1 or #s))
+        --if there is an end without a keyword that is found before it in this pass then
+        if e1 and (not (f1 or i1 or d1) or (isE1BeforeF1 and isE1BeforeI1 and isE1BeforeD1)) then
+          if depth == 0 then --if we are at depth 0 then return the position after the end
             return e1 + 3 -- include 'end'
           end
-          depth = depth - 1
+
+          --otherwise decrement the depth and resume looking from after the end
+          depth = depth - 1 
           i = e1 + 3
         else
+          -- else if there was a keyword before the end in this pass
+          -- find which word matched first and use that
           depth = depth + 1
-          i = f1 + 8
+          local firstMatch = math.min(f1 or math.huge, i1 or math.huge, d1 or math.huge)
+          if f1 and firstMatch == f1 then
+            i = f1 + 8
+          elseif i1 and firstMatch == i1 then
+            i = i1 + 2
+          else
+            i = d1 + 2
+          end
         end
       end
     end
@@ -316,7 +348,7 @@ LifeBoatAPI.Tools.Minimizer = {
     local i = 1
     while true do
       local s1, s2 = find_next_signature(text, i, functionName)
-      if not s1 then
+      if not s1 then --if there is no sp then break out
         break
       end
       local endpos = find_matching_end(text, s2)
