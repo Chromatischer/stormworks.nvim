@@ -60,7 +60,7 @@ describe("Minimizer", function()
           #result_stripped, #input))
     end)
 
-    it("should strip onDebugDraw when configured", function()
+    it("should strip onDebugDraw when configured and still produce valid lua code", function()
       local minimizer = minimizer_class:new(constants, {
         stripOnDebugDraw = true,
         removeRedundancies = false,  -- Don't remove "unused" functions
@@ -68,12 +68,19 @@ describe("Minimizer", function()
         shortenGlobals = false
       })
       local input = [[
+        z = 0
         function onTick()
           local x = 1
+          z = z+1
         end
 
         function onDebugDraw()
           print("debug")
+          if (z > 0) then
+            z = 0
+          elseif (z < 0) then
+            z = 0
+          end
         end
 
         function onDraw()
@@ -86,6 +93,9 @@ describe("Minimizer", function()
       TestUtils.assert_not_contains(result, "onDebugDraw")
       TestUtils.assert_contains(result, "onTick")
       TestUtils.assert_contains(result, "onDraw")
+
+      local is_valid, err = TestUtils.is_valid_lua(result)
+      assert.is_true(is_valid, "Output should be valid Lua: " .. tostring(err))
     end)
 
     it("should respect shortenVariables=false option", function()

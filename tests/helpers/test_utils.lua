@@ -112,9 +112,28 @@ end
 function TestUtils.create_simple_mc_script()
   return [[
 local counter = 0
+local active = true
+local fire = true
 
 function onTick()
   counter = counter + 1
+  if (counter % 10 == 1) then
+    output.setBool(1, true)
+  else
+    output.setBool(1, false)
+  end
+
+  if (active and not fire) then
+    output.setBool(2, true)
+    output.setBool(3, false)
+  elseif (active and fire) then
+    output.setBool(2, true)
+    output.setBool(3, true)
+  else
+    output.setBool(2, false)
+    output.setBool(3, false)
+  end  
+
   output.setNumber(1, counter)
 end
 

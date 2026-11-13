@@ -53,7 +53,7 @@ describe("Builder", function()
 
       -- Output should be valid Lua
       local is_valid, err = TestUtils.is_valid_lua(final)
-      assert.is_true(is_valid, "Output should be valid Lua: " .. tostring(err))
+      assert.is_true(is_valid, "Output should be valid Lua: " .. tostring(err) .. "\n\n" .. final .. "\nEOF\n\n")
     end)
   end)
 
