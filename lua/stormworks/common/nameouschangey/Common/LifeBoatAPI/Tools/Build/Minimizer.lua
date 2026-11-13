@@ -256,7 +256,7 @@ LifeBoatAPI.Tools.Minimizer = {
   end,
 
   --- Remove any function with the specified name ... end (and assignment forms) from the source text
-  --- This runs after strings/comments are stripped, so simple token scanning is safe (note that this could fail with if statements)
+  --- This runs after strings/comments are stripped, so simple token scanning is safe (note that this could fail due to `end`'s being misallocated')
   ---@param this Minimizer
   ---@param text string
   ---@param functionName string
